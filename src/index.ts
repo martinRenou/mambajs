@@ -23,11 +23,10 @@ const installCondaPackage = async (prefix: string, url: string, FS: any): Promis
         console.log("This is a package file.");
         return file;
       }
-      condaPackage.map(async (pkg) => {
+    });
+    condaPackage.map(async (pkg) => {
         const condaFiles: IFileData[] = await untarjs.extractData(pkg.data);
         saveFiles(prefix, FS, condaFiles);
-      })
-
     });
   } else {
     saveFiles(prefix, FS, files);
@@ -37,13 +36,12 @@ const installCondaPackage = async (prefix: string, url: string, FS: any): Promis
 const saveFiles = (prefix: string, FS: any, files: IFileData[]): void => {
   try {
     let filteredFilesPkg = files.filter((file) => {
-      let regexp = "site-packages";
+      let regexp = /^(.*\/)site-packages\//;
       if (file.filename.match(regexp)) {
-        let match = file.filename.match(/^(.*\/)site-packages\//);
-        console.log('match', match);
         return file;
       }
     });
+
     console.log('filteredFilesPkg', filteredFilesPkg);
 
     let destDir = `${prefix}/lib/python3.11/site-packages`;
@@ -58,11 +56,12 @@ const saveFiles = (prefix: string, FS: any, files: IFileData[]): void => {
 
     ["etc", "share"].forEach(folder => {
       let folderDest = `${prefix}/${folder}`;
-
       files.map((file) => {
-        writeFile(file.data, file.filename, FS, folder, folderDest);
+        let regexp = `^(.*\/)${folder}\/`;
+        if(file.filename.match(regexp)) {
+          writeFile(file.data, file.filename, FS, folder, folderDest);
+        }
       });
-
     });
 
   } catch (e) {
