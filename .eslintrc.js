@@ -18,21 +18,6 @@ module.exports = {
       project: ['./tsconfig.eslint.json']
     },
     plugins: ['@typescript-eslint'],
-    overrides: [
-        {
-          files: ["**/wasm/*.js", "**/wasm/*.ts"],
-          env: {
-            browser: true
-          },
-          globals: {
-            WebAssembly: "readonly"
-          },
-          rules: {
-            "no-unused-vars": ["warn", { "varsIgnorePattern": "wasm" }],
-            "no-console": "off"
-          }
-        }
-      ],
     rules: {
       '@typescript-eslint/naming-convention': [
         'error',
