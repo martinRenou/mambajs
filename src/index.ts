@@ -1,40 +1,46 @@
-import { IFileData } from './types';
-import untarjs from '@emscripten-forge/untarjs';
+import {
+  extract,
+  IFileData,
+  extractData
+} from '@emscripten-forge/untarjs';
 
-const checkConda = (url: string): boolean => {
-  let flag = false;
-  if (url.toLowerCase().endsWith('.conda')) {
-    flag = true;
-  }
-  return flag;
-};
-
-const installCondaPackage = async (
+export const installCondaPackage = async (
   prefix: string,
   url: string,
-  FS: any
+  FS: any,
+  verbose: false
 ): Promise<void> => {
-  let files: IFileData[] = await untarjs.extract(url);
-  const isCondaPackage = checkConda(url);
-  if (isCondaPackage) {
-    console.log(`!!extract conda package ${url})`);
-
-    let condaPackage = files.filter(file => {
-      if (file.filename.startsWith('pkg-')) {
-        console.log('This is a package file.');
-        return file;
+  try {
+    let files: IFileData[] = await extract(url);
+    if (files.length !== 0) {
+      console.log('exctracted files', files);
+      if (url.toLowerCase().endsWith('.conda')) {
+        let condaPackage = files.filter(file => {
+          if (file.filename.startsWith('pkg-')) {
+            return file;
+          }
+        });
+        condaPackage.map(async pkg => {
+          const condaFiles: IFileData[] = await extractData(pkg.data);
+          saveFiles(prefix, FS, condaFiles, verbose);
+        });
+      } else {
+        saveFiles(prefix, FS, files, verbose);
       }
-    });
-    condaPackage.map(async pkg => {
-      const condaFiles: IFileData[] = await untarjs.extractData(pkg.data);
-      saveFiles(prefix, FS, condaFiles);
-    });
-  } else {
-    saveFiles(prefix, FS, files);
+    } else {
+      console.log('There is no files');
+    }
+  } catch (error) {
+    console.log(error);
   }
 };
 
-const saveFiles = (prefix: string, FS: any, files: IFileData[]): void => {
+const saveFiles = (
+  prefix: string,
+  FS: any,
+  files: IFileData[],
+  verbose: false
+): void => {
   try {
     let filteredFilesPkg = files.filter(file => {
       let regexp = 'site-packages';
@@ -52,7 +58,14 @@ const saveFiles = (prefix: string, FS: any, files: IFileData[]): void => {
     }
 
     filteredFilesPkg.map(file => {
-      writeFile(file.data, file.filename, FS, 'site-packages', destDir);
+      writeFile(
+        file.data,
+        file.filename,
+        FS,
+        'site-packages',
+        destDir,
+        verbose
+      );
     });
 
     ['etc', 'share'].forEach(folder => {
@@ -62,7 +75,7 @@ const saveFiles = (prefix: string, FS: any, files: IFileData[]): void => {
         let regexp = `${folder}`;
         if (file.filename.match(regexp)) {
           console.log('files for etc and share', file.filename);
-          writeFile(file.data, file.filename, FS, folder, folderDest);
+          writeFile(file.data, file.filename, FS, folder, folderDest, verbose);
         }
       });
     });
@@ -77,7 +90,8 @@ const writeFile = (
   filename: string,
   FS: any,
   folder: string,
-  folderDest: string
+  folderDest: string,
+  verbose: false
 ): void => {
   let regexp = `${folder}`;
   if (filename.match(regexp)) {
@@ -96,6 +110,10 @@ const writeFile = (
     console.log('fileName', fileName);
 
     destPath = `${destPath}${fileName}`;
+
+    if (verbose) {
+      console.log(`Saving files into ${destPath}`);
+    }
 
     let encodedData = new TextDecoder('utf-8').decode(data);
     FS.writeFile(destPath, encodedData);
