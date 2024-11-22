@@ -388,7 +388,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@emscripten-forge/mambajs@workspace:."
   dependencies:
-    "@emscripten-forge/untarjs": ^3.0.0
+    "@emscripten-forge/untarjs": ^4.0.0
     "@eslint/js": ^9.13.0
     "@types/jest": ^29.5.14
     "@types/node": ^22.8.1
@@ -412,14 +412,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@emscripten-forge/untarjs@npm:^3.0.0":
-  version: 3.1.0
-  resolution: "@emscripten-forge/untarjs@npm:3.1.0"
+"@emscripten-forge/untarjs@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "@emscripten-forge/untarjs@npm:4.0.0"
   dependencies:
     assert: ^2.1.0
     process: ^0.11.10
     url: ^0.11.4
-  checksum: e661bf2e7dd0d811f6db630902dd1e13db959c87825fddba2805b6820498be66cb10266b637c52cce38042b1cdee4938ca5c6acf2d0b497f8ba26f1e4831d9b8
+  checksum: 82a313a87aa598eb320936088df86e678acd787885313def0133c2990e8d11026a0adb0a89fd12eed9e25a24635ee7eb9d3322d12114dbf441a9f620f0befc7b
   languageName: node
   linkType: hard
 
