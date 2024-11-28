@@ -48,6 +48,7 @@ export async function loadDynlibsFromPackage(
     pkg_file_name,
     pkg_is_shared_library,
     dynlibPaths,
+    Module
   ) {
 
     // for(const path of dynlibPaths){
