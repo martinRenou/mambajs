@@ -4,3 +4,5 @@ npm-debug.log/
 lib/
 
 .yarn
+
+tsconfig.tsbuildinfo

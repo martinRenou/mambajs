@@ -1,70 +1,48 @@
-import { extract, extractData, IFileData } from '@emscripten-forge/untarjs';
-import { fetchJson } from './helper';
-import { loadDynlibsFromPackage } from './dynload/dynload';
+import { initUntarJS, FilesData } from '@emscripten-forge/untarjs';
 
-interface IEmpackEnvMetaPkg {
-  name: string;
-  version: string;
-  build: string;
-  filename_stem: string;
-  filename: string;
-  url: string;
-}
-
-interface ISplittedPackages {
-  pythonPackage: IEmpackEnvMetaPkg;
-  packages: IEmpackEnvMetaPkg[];
-}
+const untarjsReady = initUntarJS();
 
 export const installCondaPackage = async (
   prefix: string,
   url: string,
   FS: any,
   verbose: boolean
-): Promise<IFileData[] | undefined> => {
-  try {
-    let sharedLibs: IFileData[] = [];
-    let files: IFileData[] = await extract(url);
-    if (files.length !== 0) {
-      if (url.toLowerCase().endsWith('.conda')) {
-        let condaPackage: IFileData = {
-          filename: '',
-          data: new Uint8Array()
-        };
+): Promise<void> => {
+  const untarjs = await untarjsReady;
 
-        let packageInfo: IFileData = {
-          filename: '',
-          data: new Uint8Array()
-        };
+  let files = await untarjs.extract(url);
 
-        files.map(file => {
-          if (file.filename.startsWith('pkg-')) {
-            condaPackage = file;
-          } else if (file.filename.startsWith('info-')) {
-            packageInfo = file;
-          }
-        });
-        const condaFiles: IFileData[] = await extractData(condaPackage.data);
-        const packageInfoFiles: IFileData[] = await extractData(
-          packageInfo.data
-        );
-        let mergedFiles = [...condaFiles, ...packageInfoFiles];
-        createCondaMetaFile(packageInfoFiles, prefix, FS, verbose);
-        saveFiles(prefix, FS, mergedFiles, verbose);
-        sharedLibs = getSharedLibs(condaFiles, prefix);
-      } else {
-        createCondaMetaFile(files, prefix, FS, verbose);
-        saveFiles(prefix, FS, files, verbose);
-        sharedLibs = getSharedLibs(files, prefix);
+  if (Object.keys(files).length !== 0) {
+    if (url.toLowerCase().endsWith('.conda')) {
+      let condaPackage: Uint8Array | undefined = undefined;
+      let packageInfo: Uint8Array | undefined = undefined;
+
+      Object.keys(files).map(file => {
+        if (file.startsWith('pkg-')) {
+          condaPackage = files[file];
+        } else if (file.startsWith('info-')) {
+          packageInfo = files[file];
+        }
+      });
+
+      if (condaPackage === undefined || packageInfo === undefined) {
+        throw new Error(`Invalid .conda package ${url}`);
       }
-      return sharedLibs;
+
+      const condaFiles: FilesData = await untarjs.extractData(condaPackage);
+      const packageInfoFiles: FilesData = await untarjs.extractData(packageInfo);
+
+      createCondaMetaFile(packageInfoFiles, prefix, FS, verbose);
+      saveFiles(prefix, FS, {...condaFiles, ...packageInfoFiles}, verbose);
     } else {
-      console.log('There is no files');
-      return [];
+      createCondaMetaFile(files, prefix, FS, verbose);
+      saveFiles(prefix, FS, files, verbose);
     }
-  } catch (error) {
-    console.log(error);
+
+    return;
   }
+
+  throw new Error(`There is no file in ${url}`);
 };
 
 const getSharedLibs = (files: IFileData[], prefix: string): IFileData[] => {
@@ -84,7 +62,7 @@ const getSharedLibs = (files: IFileData[], prefix: string): IFileData[] => {
 const saveFiles = (
   prefix: string,
   FS: any,
-  files: IFileData[],
+  files: FilesData,
   verbose: boolean
 ): void => {
   console.log('Saving files into browser memory');
@@ -103,22 +81,22 @@ const saveFiles = (
 };
 
 const savingFiles = (
-  files: IFileData[],
+  files: FilesData,
   folder: string,
   folderDest: string,
   FS: any,
   verbose: boolean
 ) => {
-  files.forEach(file => {
+  Object.keys(files).forEach(filename => {
     const regexp = new RegExp(`^${folder}`);
-    if (file.filename.match(regexp)) {
+    if (filename.match(regexp)) {
       if (!FS.analyzePath(folderDest).exists) {
         FS.mkdirTree(folderDest);
       }
       if (verbose) {
-        console.log(`Writing a file for ${folderDest} folder`, file.filename);
+        console.log(`Writing a file for ${folderDest} folder`, filename);
       }
-      writeFile(file.data, file.filename, FS, folder, folderDest, verbose);
+      writeFile(files[filename], filename, FS, folder, folderDest, verbose);
     }
   });
 };
@@ -156,18 +134,18 @@ const writeFile = (
 };
 
 const createCondaMetaFile = (
-  files: IFileData[],
+  files: FilesData,
   prefix: string,
   FS: any,
   verbose: boolean
 ) => {
   let infoData: Uint8Array = new Uint8Array();
 
-  files.map((file: IFileData) => {
+  Object.keys(files).map((filename) => {
     let regexp = 'index.json';
 
-    if (file.filename.match(regexp)) {
-      infoData = file.data;
+    if (filename.match(regexp)) {
+      infoData = files[filename];
     }
   });
 
