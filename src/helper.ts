@@ -1,4 +1,4 @@
-export const fetchJson = async (url: string) => {
+export const fetchJson = async (url: string): Promise<any> => {
   let response = await fetch(url);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
@@ -6,3 +6,4 @@ export const fetchJson = async (url: string) => {
   let json = await response.json();
   return json;
 };
+

@@ -41,16 +41,16 @@ function isInSharedLibraryPath(prefix, libPath){
     }
 }
 
-
+//+++
 export async function loadDynlibsFromPackage(
     prefix,
-    python_version,
     pkg_file_name,
     pkg_is_shared_library,
     dynlibPaths,
     Module
   ) {
 
+    console.log('Module',Module);
     // for(const path of dynlibPaths){
     //     console.log(path);
     // }
@@ -58,10 +58,10 @@ export async function loadDynlibsFromPackage(
     // assume that shared libraries of a package are located in <package-name>.libs directory,
     // following the convention of auditwheel.
     if(prefix == "/"){
-        var sitepackages = `/lib/python${python_version[0]}.${python_version[1]}/site-packages`
+        var sitepackages = `/lib/python3.11/site-packages`
     }
     else{
-        var sitepackages = `${prefix}/lib/python${python_version[0]}.${python_version[1]}/site-packages`
+        var sitepackages = `${prefix}/lib/python3.11/site-packages`
     }
     const auditWheelLibDir = `${sitepackages}/${
         pkg_file_name.split("-")[0]
@@ -87,7 +87,10 @@ export async function loadDynlibsFromPackage(
       const globalLibs = calculateGlobalLibs(
         dynlibPaths,
         readFileMemoized,
+        Module
       );
+
+      console.log('dynlibs',dynlibs);
 
       dynlibs = dynlibPaths.map((path) => {
         const global = globalLibs.has(Module.PATH.basename(path));
@@ -99,17 +102,19 @@ export async function loadDynlibsFromPackage(
     }
   
     dynlibs.sort((lib1, lib2) => Number(lib2.global) - Number(lib1.global));
-
+    console.log('dynlibs after sorting',dynlibs);
+    console.log('loading dyn libs');
     for (const { path, global } of dynlibs) {
       await loadDynlib(prefix, path, global, [auditWheelLibDir], readFileMemoized);
     }
   }
-
+//+++
 function createDynlibFS(
     prefix,
     lib,
     searchDirs,
-    readFileFunc
+    readFileFunc,
+    Module
 ) {
     const dirname = lib.substring(0, lib.lastIndexOf("/"));
 
@@ -167,7 +172,8 @@ function createDynlibFS(
 
 function calculateGlobalLibs(
     libs,
-    readFileFunc
+    readFileFunc, 
+    Module
 ) {
     let readFile = Module.FS.readFile;
     if (readFileFunc !== undefined) {
@@ -193,7 +199,9 @@ function calculateGlobalLibs(
 // it.
 const acquireDynlibLock = createLock();
 
-async function loadDynlib(prefix, lib, global, searchDirs, readFileFunc) {
+
+//+++
+async function loadDynlib(prefix, lib, global, searchDirs, readFileFunc, Module) {
     if (searchDirs === undefined) {
         searchDirs = [];
     }
@@ -215,7 +223,8 @@ async function loadDynlib(prefix, lib, global, searchDirs, readFileFunc) {
         
         const dsoOnlyLibName = Module.LDSO.loadedLibsByName[libName];
         const dsoFullLib = Module.LDSO.loadedLibsByName[lib];
-
+console.log('dsoOnlyLibName',dsoOnlyLibName);
+console.log('dsoFullLib',dsoFullLib);
         if(!dsoOnlyLibName && !dsoFullLib){
             console.execption(`Failed to load ${libName} from ${lib} LDSO not found`);
         }
