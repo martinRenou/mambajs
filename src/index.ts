@@ -17,7 +17,7 @@ export interface IEmpackEnvMetaPkg {
 
 export interface IPackagesInfo {
   pythonPackage?: IEmpackEnvMetaPkg;
-  pythonVersion?: string;
+  pythonVersion?: number[];
 }
 
 const getPythonVersion = (packages: IEmpackEnvMetaPkg[]): IPackagesInfo => {
@@ -30,7 +30,7 @@ const getPythonVersion = (packages: IEmpackEnvMetaPkg[]): IPackagesInfo => {
     }
   }
   if (pythonPackage) { 
-  let pythonVersion = pythonPackage.version.split('.').map(x => parseInt(x)).join('.');
+  let pythonVersion = pythonPackage.version.split('.').map(x => parseInt(x));
   return { pythonPackage, pythonVersion };
   } else {
     return {};
