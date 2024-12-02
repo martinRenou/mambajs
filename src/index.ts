@@ -6,7 +6,7 @@ import {
 import { fetchJson } from './helper';
 import { loadDynlibsFromPackage } from './dynload/dynload';
 
-interface IEmpackEnvMetaPkg {
+export interface IEmpackEnvMetaPkg {
   name: string;
   version: string;
   build: string;
@@ -14,6 +14,28 @@ interface IEmpackEnvMetaPkg {
   filename: string;
   url: string;
 }
+
+export interface IPackagesInfo {
+  pythonPackage?: IEmpackEnvMetaPkg;
+  pythonVersion?: string;
+}
+
+const getPythonVersion = (packages: IEmpackEnvMetaPkg[]): IPackagesInfo => {
+  let pythonPackage: IEmpackEnvMetaPkg | undefined = undefined;
+  for (let i = 0; i < packages.length; i++) {
+    if (packages[i].name == 'python') {
+      pythonPackage = packages[i];
+      packages.splice(i, 1);
+      break;
+    }
+  }
+  if (pythonPackage) { 
+  let pythonVersion = pythonPackage.version.split('.').map(x => parseInt(x)).join('.');
+  return { pythonPackage, pythonVersion };
+  } else {
+    return {};
+  }
+};
 
 export const installCondaPackage = async (
   prefix: string,
@@ -198,7 +220,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   verbose: boolean = true,
   skipLoadingSharedLibs: boolean = false,
   Module: any
-) => {
+): Promise<IPackagesInfo> => {
   if (verbose) {
     console.log('fetching packages.json from', packagesJsonUrl);
   }
@@ -206,6 +228,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   let empackEnvMeta = await fetchJson(packagesJsonUrl);
   let packages: IEmpackEnvMetaPkg[] = empackEnvMeta.packages;
   let prefix = empackEnvMeta.prefix;
+  let pythonData = getPythonVersion(packages);
 
   if (verbose) {
     console.log('installCondaPackage');
@@ -229,6 +252,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   if (!skipLoadingSharedLibs) {
     loadShareLibs(packages, sharedLibs, prefix, Module);
   }
+  return pythonData;
 };
 
 const loadShareLibs = (
