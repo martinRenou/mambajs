@@ -18,6 +18,7 @@ export interface IEmpackEnvMetaPkg {
 export interface IPackagesInfo {
   pythonPackage?: IEmpackEnvMetaPkg;
   pythonVersion?: number[];
+  prefix?: string;
 }
 
 const getPythonVersion = (packages: IEmpackEnvMetaPkg[]): IPackagesInfo => {
@@ -229,6 +230,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   let packages: IEmpackEnvMetaPkg[] = empackEnvMeta.packages;
   let prefix = empackEnvMeta.prefix;
   let pythonData = getPythonVersion(packages);
+  pythonData.prefix = prefix;
 
   if (verbose) {
     console.log('installCondaPackage');
@@ -246,8 +248,6 @@ export const bootstrapFromEmpackPackedEnvironment = async (
       )
     )
   );
-
-  //console.log(`sharedLibs`, sharedLibs);
 
   if (!skipLoadingSharedLibs) {
     loadShareLibs(packages, sharedLibs, prefix, Module);
