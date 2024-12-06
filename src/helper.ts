@@ -6,4 +6,3 @@ export const fetchJson = async (url: string): Promise<any> => {
   let json = await response.json();
   return json;
 };
-

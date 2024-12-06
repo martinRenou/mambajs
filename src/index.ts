@@ -1,6 +1,6 @@
 import {
-  initUntarJS,
   FilesData,
+  initUntarJS,
   IUnpackJSAPI
 } from '@emscripten-forge/untarjs';
 import { fetchJson } from './helper';
@@ -30,9 +30,9 @@ const getPythonVersion = (packages: IEmpackEnvMetaPkg[]): IPackagesInfo => {
       break;
     }
   }
-  if (pythonPackage) { 
-  let pythonVersion = pythonPackage.version.split('.').map(x => parseInt(x));
-  return { pythonPackage, pythonVersion };
+  if (pythonPackage) {
+    let pythonVersion = pythonPackage.version.split('.').map(x => parseInt(x));
+    return { pythonPackage, pythonVersion };
   } else {
     return {};
   }
@@ -239,13 +239,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   const untarjs = await untarjsReady;
   let sharedLibs = await Promise.all(
     packages.map(pkg =>
-      installCondaPackage(
-        prefix,
-        pkg.url,
-        Module.FS,
-        untarjs,
-        verbose
-      )
+      installCondaPackage(prefix, pkg.url, Module.FS, untarjs, verbose)
     )
   );
 
@@ -264,13 +258,7 @@ const loadShareLibs = (
   packages.map((pkg, i) => {
     let packageShareLibs = sharedLibs[i];
     if (Object.keys(packageShareLibs).length) {
-      loadDynlibsFromPackage(
-        prefix,
-        pkg.name,
-        false,
-        packageShareLibs,
-        Module
-      );
+      loadDynlibsFromPackage(prefix, pkg.name, false, packageShareLibs, Module);
     }
   });
 };
