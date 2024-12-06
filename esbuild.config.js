@@ -15,7 +15,7 @@ const fs = require('fs');
     outdir: './lib',
     format: 'esm',
     loader: {
-      '.wasm': 'base64'
+      '.wasm': 'file'
     },
     plugins: [
       NodeModulesPolyfillPlugin(),
