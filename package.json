@@ -1,6 +1,6 @@
 {
   "name": "@emscripten-forge/mambajs",
-  "packageManager": "yarn@4.5.1",
+  "version": "0.1.0",
   "description": "A simple project for downloading conda packages and saving them into browser memory",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
