@@ -225,6 +225,7 @@ const checkCondaMetaFile = (files: FilesData): boolean => {
   });
   return isCondaMetaFile;
 };
+
 const initPrimaryPhase = async (
   pythonPackage: IEmpackEnvMetaPkg,
   pythonVersion: number[],
@@ -249,7 +250,8 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   verbose: boolean = true,
   skipLoadingSharedLibs: boolean = false,
   Module: any,
-  pkgRootUrl: string
+  pkgRootUrl: string,
+  bootstrapPython = false
 ): Promise<IPackagesInfo> => {
   if (verbose) {
     console.log('fetching packages.json from', packagesJsonUrl);
@@ -264,7 +266,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
   const untarjsReady = initUntarJS();
   const untarjs = await untarjsReady;
 
-  if (pythonPackage && pythonVersion) {
+  if (bootstrapPython && pythonPackage && pythonVersion) {
     await initPrimaryPhase(
       pythonPackage,
       pythonVersion,
@@ -275,6 +277,7 @@ export const bootstrapFromEmpackPackedEnvironment = async (
       prefix
     );
   }
+
   if (packages?.length) {
     let sharedLibs = await Promise.all(
       packages.map(pkg => {
@@ -296,6 +299,11 @@ export const bootstrapFromEmpackPackedEnvironment = async (
       loadShareLibs(packages, sharedLibs, prefix, Module);
     }
   }
+
+  if (bootstrapPython && pythonPackage && pythonVersion) {
+    globalThis.Module.init_phase_2(prefix, pythonVersion, verbose);
+  }
+
   return packagesData;
 };
 
