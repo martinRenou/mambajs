@@ -43,8 +43,7 @@ function isInSharedLibraryPath(prefix, libPath){
 
 export async function loadDynlibsFromPackage(
     prefix,
-    pkg_file_name,
-    pkg_is_shared_library,
+    pkgName,
     dynlibPaths,
     Module
   ) {
@@ -56,41 +55,26 @@ export async function loadDynlibsFromPackage(
     else{
         var sitepackages = `${prefix}/lib/python3.11/site-packages`
     }
-    const auditWheelLibDir = `${sitepackages}/${
-        pkg_file_name.split("-")[0]
-    }.libs`;
+    const auditWheelLibDir = `${sitepackages}/${pkgName}.libs`;
 
     // This prevents from reading large libraries multiple times.
     const readFileMemoized = memoize(Module.FS.readFile);
-    const forceGlobal = !!pkg_is_shared_library;
-
-
 
     let dynlibs = [];
 
-
-    if (forceGlobal) {
-      dynlibs = Object.keys(dynlibPaths).map((path) =>{
-        return {
-          path: path,
-          global: true,
-        };
-      });
-    } else {
-      const globalLibs = calculateGlobalLibs(
+    const globalLibs = calculateGlobalLibs(
         dynlibPaths,
         readFileMemoized,
         Module
-      );
+    );
 
-      dynlibs = Object.keys(dynlibPaths).map((path) =>{
+    dynlibs = dynlibPaths.map((path) =>{
         const global = globalLibs.has(Module.PATH.basename(path));
         return {
-          path: path,
-          global: global || !! pkg_is_shared_library || isInSharedLibraryPath(prefix, path) || path.startsWith(auditWheelLibDir),
+            path: path,
+            global: global || isInSharedLibraryPath(prefix, path) || path.startsWith(auditWheelLibDir),
         };
-      });
-    }
+    });
 
     dynlibs.sort((lib1, lib2) => Number(lib2.global) - Number(lib1.global));
     for (const { path, global } of dynlibs) {
@@ -172,7 +156,7 @@ function calculateGlobalLibs(
 
     const globalLibs = new Set();
 
-    Object.keys(libs).map((lib) => {
+    libs.map((lib) => {
         const binary = readFile(lib);
         const needed = Module.getDylinkMetadata(binary).neededDynlibs;
         needed.forEach((lib) => {
@@ -193,9 +177,9 @@ async function loadDynlib(prefix, lib, global, searchDirs, readFileFunc, Module)
     if (searchDirs === undefined) {
         searchDirs = [];
     }
- 
+
     const releaseDynlibLock = await acquireDynlibLock();
-    
+
     try {
         const fs = createDynlibFS(prefix, lib, searchDirs, readFileFunc, Module);
 

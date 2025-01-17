@@ -9,29 +9,49 @@ export interface IEmpackEnvMetaPkg {
   url: string;
 }
 
-export async function fetchJson(url: string): Promise<any> {
-  let response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  let json = await response.json();
-  return json;
+export interface IEmpackEnvMeta {
+  prefix: string;
+  packages: IEmpackEnvMetaPkg[];
 }
+
+/**
+ * Shared libraries. list of .so files
+ */
+export type TSharedLibs = string[];
+
+/**
+ * Shared libraries. A map package name -> list of .so files
+ */
+export type TSharedLibsMap = { [pkgName: string]: TSharedLibs };
 
 export function getParentDirectory(filePath: string): string {
   return filePath.substring(0, filePath.lastIndexOf('/'));
 }
 
-export function getSharedLibs(files: FilesData, prefix: string): FilesData {
-  let sharedLibs: FilesData = {};
+export function getSharedLibs(files: FilesData, prefix: string): TSharedLibs {
+  let sharedLibs: TSharedLibs = [];
 
   Object.keys(files).map(file => {
-    if (file.endsWith('.so') || file.includes('.so.')) {
-      sharedLibs[`${prefix}/${file}`] = files[file];
+    if (
+      (file.endsWith('.so') || file.includes('.so.')) &&
+      checkWasmMagicNumber(files[file])
+    ) {
+      sharedLibs.push(`${prefix}/${file}`);
     }
   });
 
   return sharedLibs;
+}
+
+export function checkWasmMagicNumber(uint8Array: Uint8Array): boolean {
+  const WASM_MAGIC_NUMBER = [0x00, 0x61, 0x73, 0x6d];
+
+  return (
+    uint8Array[0] === WASM_MAGIC_NUMBER[0] &&
+    uint8Array[1] === WASM_MAGIC_NUMBER[1] &&
+    uint8Array[2] === WASM_MAGIC_NUMBER[2] &&
+    uint8Array[3] === WASM_MAGIC_NUMBER[3]
+  );
 }
 
 export function isCondaMeta(files: FilesData): boolean {
@@ -43,22 +63,6 @@ export function isCondaMeta(files: FilesData): boolean {
     }
   });
   return isCondaMetaFile;
-}
-
-export function getPythonVersion(
-  packages: IEmpackEnvMetaPkg[]
-): number[] | undefined {
-  let pythonPackage: IEmpackEnvMetaPkg | undefined = undefined;
-  for (let i = 0; i < packages.length; i++) {
-    if (packages[i].name == 'python') {
-      pythonPackage = packages[i];
-      break;
-    }
-  }
-
-  if (pythonPackage) {
-    return pythonPackage.version.split('.').map(x => parseInt(x));
-  }
 }
 
 export function saveFiles(FS: any, files: FilesData, prefix: string): void {
@@ -76,33 +80,13 @@ export function saveFiles(FS: any, files: FilesData, prefix: string): void {
   }
 }
 
-export async function bootstrapPythonPackage(
-  pythonPackage: IEmpackEnvMetaPkg,
-  pythonVersion: number[],
-  verbose: boolean,
-  untarjs: IUnpackJSAPI,
-  Module: any,
-  pkgRootUrl: string,
-  prefix: string
-): Promise<void> {
-  let url = pythonPackage.url
-    ? pythonPackage.url
-    : `${pkgRootUrl}/${pythonPackage.filename}`;
-  if (verbose) {
-    console.log(`Installing a python package from ${url}`);
-  }
-  await installCondaPackage(prefix, url, Module.FS, untarjs, verbose);
-  await Module.init_phase_1(prefix, pythonVersion, verbose);
-}
-
 export async function installCondaPackage(
   prefix: string,
   url: string,
   FS: any,
   untarjs: IUnpackJSAPI,
   verbose: boolean
-): Promise<FilesData> {
-  let sharedLibs: FilesData = {};
+): Promise<TSharedLibs> {
   if (!url) {
     throw new Error(`There is no file in ${url}`);
   }
@@ -154,10 +138,12 @@ export async function installCondaPackage(
   if (prefix === '/') {
     newPrefix = '';
   }
+
   if (Object.keys(installedFiles).length !== 0) {
-    sharedLibs = getSharedLibs(installedFiles, newPrefix);
+    return getSharedLibs(installedFiles, newPrefix);
   }
-  return sharedLibs;
+
+  return [];
 }
 
 export function saveCondaMetaFile(
