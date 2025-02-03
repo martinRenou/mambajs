@@ -43,6 +43,57 @@ export function getSharedLibs(files: FilesData, prefix: string): TSharedLibs {
   return sharedLibs;
 }
 
+function replaceString(
+  data: Uint8Array,
+  search: string,
+  replacement: string
+): Uint8Array {
+  const searchBytes = new TextEncoder().encode(search);
+  const replacementBytes = new TextEncoder().encode(replacement);
+
+  const maxOutputSize =
+    data.length +
+    (replacementBytes.length - searchBytes.length) *
+      countOccurrences(data, searchBytes);
+  const output = new Uint8Array(maxOutputSize);
+
+  let i = 0,
+    j = 0;
+  while (i < data.length) {
+    if (matchesAt(data, searchBytes, i)) {
+      output.set(replacementBytes, j);
+      j += replacementBytes.length;
+      i += searchBytes.length;
+    } else {
+      output[j++] = data[i++];
+    }
+  }
+
+  return output.subarray(0, j);
+}
+
+function countOccurrences(data: Uint8Array, searchBytes: Uint8Array): number {
+  let count = 0;
+  for (let i = 0; i <= data.length - searchBytes.length; i++) {
+    if (matchesAt(data, searchBytes, i)) {
+      count++;
+      i += searchBytes.length - 1;
+    }
+  }
+  return count;
+}
+
+function matchesAt(
+  data: Uint8Array,
+  searchBytes: Uint8Array,
+  pos: number
+): boolean {
+  if (pos + searchBytes.length > data.length) return false;
+  return data
+    .subarray(pos, pos + searchBytes.length)
+    .every((byte, idx) => byte === searchBytes[idx]);
+}
+
 export function checkWasmMagicNumber(uint8Array: Uint8Array): boolean {
   const WASM_MAGIC_NUMBER = [0x00, 0x61, 0x73, 0x6d];
 
@@ -84,59 +135,152 @@ export function saveFilesIntoEmscriptenFS(
   }
 }
 
+export interface IUntarCondaPackageOptions {
+  /**
+   * The URL to the package
+   */
+  url: string;
+
+  /**
+   * The current untarjs instance
+   */
+  untarjs: IUnpackJSAPI;
+
+  /**
+   * Whether the functino will be verbose or not
+   */
+  verbose?: boolean;
+
+  /**
+   * Whether or not to generate conda-meta files
+   */
+  generateCondaMeta?: boolean;
+
+  /**
+   * The prefix for relocation
+   */
+  relocatePrefix?: string;
+
+  /**
+   * The environment Python version, if it is there
+   */
+  pythonVersion?: number[];
+}
+
 /**
  * Untar conda or empacked package, given a URL to it. This will also do prefix relocation.
- * @param url The URL to the package
- * @param untarjs The current untarjs instance
- * @param verbose Whether it's verbose or not
- * @param generateCondaMeta Whether or not to generate conda meta files
+ * @param options The functino options
  * @returns the files to install
  */
 export async function untarCondaPackage(
-  url: string,
-  untarjs: IUnpackJSAPI,
-  verbose = false,
-  generateCondaMeta = false
+  options: IUntarCondaPackageOptions
 ): Promise<FilesData> {
+  const {
+    url,
+    untarjs,
+    verbose,
+    generateCondaMeta,
+    relocatePrefix,
+    pythonVersion
+  } = options;
+
   const extractedFiles = await untarjs.extract(url);
 
-  if (Object.keys(extractedFiles).length !== 0) {
-    if (url.toLowerCase().endsWith('.conda')) {
-      let condaPackage: Uint8Array = new Uint8Array();
-      let packageInfo: Uint8Array = new Uint8Array();
+  const { info, pkg } = await splitPackageInfo(url, extractedFiles, untarjs);
 
-      Object.keys(extractedFiles).map(file => {
-        if (file.startsWith('pkg-')) {
-          condaPackage = extractedFiles[file];
-        } else if (file.startsWith('info-')) {
-          packageInfo = extractedFiles[file];
-        }
-      });
-
-      if (
-        (condaPackage && condaPackage.byteLength === 0) ||
-        (packageInfo && packageInfo.byteLength === 0)
-      ) {
-        throw new Error(`Invalid .conda package ${url}`);
+  // Prefix relocation
+  if (info['info/paths.json']) {
+    const paths = JSON.parse(
+      new TextDecoder('utf-8').decode(info['info/paths.json'])
+    );
+    for (const filedesc of paths['paths']) {
+      // If it doesn't need to be relocated, or if the file has
+      // been filtered out from the package, bail early
+      if (!filedesc['prefix_placeholder'] || !pkg[filedesc['_path']]) {
+        continue;
       }
-      const condaFiles: FilesData = await untarjs.extractData(condaPackage);
 
-      if (generateCondaMeta) {
-        return {
-          ...condaFiles,
-          ...getCondaMetaFile(extractedFiles, verbose)
-        };
-      } else {
-        return condaFiles;
-      }
-    } else {
-      // This will happen for empacked packages, there are already
-      // properly relocated and can be installed directly without further processing
-      return extractedFiles;
+      const prefixPlaceholder = filedesc['prefix_placeholder'].endsWith('/')
+        ? filedesc['prefix_placeholder']
+        : `${filedesc['prefix_placeholder']}/`;
+      pkg[filedesc['_path']] = replaceString(
+        pkg[filedesc['_path']],
+        prefixPlaceholder,
+        relocatePrefix || ''
+      );
     }
   }
 
-  return {};
+  // Fix site-packages prefix
+  if (pythonVersion) {
+    for (const file of Object.keys(pkg)) {
+      if (file.startsWith('site-packages')) {
+        pkg[`/lib/python${pythonVersion[0]}.${pythonVersion[1]}/${file}`] =
+          pkg[file];
+        delete pkg[file];
+      }
+    }
+  }
+
+  if (generateCondaMeta) {
+    return {
+      ...pkg,
+      ...getCondaMetaFile(info, !!verbose)
+    };
+  }
+
+  return pkg;
+}
+
+/**
+ * Split package info from actual package files
+ * @param filename The original filename
+ * @param files The package files
+ * @param untarjs The current untarjs instance
+ * @returns Splitted files between info and actual package files
+ */
+export async function splitPackageInfo(
+  filename: string,
+  files: FilesData,
+  untarjs: IUnpackJSAPI
+): Promise<{ info: FilesData; pkg: FilesData }> {
+  let info: FilesData = {};
+  let pkg: FilesData = {};
+
+  // For .conda files, extract info and pkg separately
+  if (filename.toLowerCase().endsWith('.conda')) {
+    let condaPackage: Uint8Array = new Uint8Array();
+    let packageInfo: Uint8Array = new Uint8Array();
+
+    Object.keys(files).map(file => {
+      if (file.startsWith('pkg-')) {
+        condaPackage = files[file];
+      } else if (file.startsWith('info-')) {
+        packageInfo = files[file];
+      }
+    });
+
+    if (
+      (condaPackage && condaPackage.byteLength === 0) ||
+      (packageInfo && packageInfo.byteLength === 0)
+    ) {
+      throw new Error(`Invalid .conda package ${filename}`);
+    }
+
+    pkg = await untarjs.extractData(condaPackage);
+    info = await untarjs.extractData(packageInfo);
+  } else {
+    // For tar.gz packages, extract everything from the info directory
+    Object.keys(files).map(file => {
+      if (file.startsWith('info/')) {
+        info[file] = files[file];
+      } else {
+        pkg[file] = files[file];
+      }
+    });
+  }
+
+  return { info, pkg };
 }
 
 /**
@@ -205,10 +349,6 @@ export function getCondaMetaFile(
         path = filename;
       }
     });
-    // let condaMetaDir = `${prefix}/conda-meta`;
-    // if (!FS.analyzePath(`${condaMetaDir}`).exists) {
-    //   FS.mkdirTree(`${condaMetaDir}`);
-    // }
 
     if (verbose) {
       console.log(`Saving conda-meta file ${path}`);
