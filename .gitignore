@@ -5,4 +5,8 @@ lib/
 
 .yarn
 
+picomamba/libs/
+picomamba/lib/
+picomamba/wasm-picomamba/
+
 tsconfig.tsbuildinfo
