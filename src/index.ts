@@ -1,5 +1,4 @@
 import { initUntarJS, IUnpackJSAPI } from '@emscripten-forge/untarjs';
-import { initEnv } from './conda-packages-solver';
 import {
   getSharedLibs,
   IEmpackEnvMeta,
@@ -13,11 +12,9 @@ import {
 } from './helper';
 import { loadDynlibsFromPackage } from './dynload/dynload';
 import { hasPipDependencies, solvePip } from './solverpip';
+import { getSolvedPackages } from './solver';
 
 export * from './helper';
-
-import coreWasm from './conda-packages-solver/core.wasm';
-export const mambaWasm = coreWasm;
 
 /**
  * Given a list of packages from a lock file, get the Python version
@@ -215,12 +212,13 @@ export async function waitRunDependencies(Module: any): Promise<void> {
 
 export async function solve(
   yml: string,
-  logger?: ILogger,
-  locateWasm?: (file: string) => string
+  logger?: ILogger
 ): Promise<{ condaPackages: ISolvedPackages; pipPackages: ISolvedPackages }> {
-  const picomamba = await initEnv(logger, locateWasm);
+  const condaPackages = (await getSolvedPackages(
+    yml,
+    logger
+  )) as ISolvedPackages;
 
-  const condaPackages = (await picomamba.solve(yml)) as ISolvedPackages;
   let pipPackages: ISolvedPackages = {};
 
   logger?.log('');
@@ -240,7 +238,6 @@ export async function solve(
       logger?.error(msg);
       throw msg;
     }
-
     logger?.log('');
     logger?.log('Process pip dependencies ...');
 
