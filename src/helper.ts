@@ -50,7 +50,10 @@ export type TSharedLibs = string[];
  * Shared libraries. A map package name -> list of .so files
  */
 export type TSharedLibsMap = { [pkgName: string]: TSharedLibs };
-
+export interface IBootstrapData {
+  sharedLibs: TSharedLibsMap;
+  paths: { [key: string]: string };
+}
 export function getParentDirectory(filePath: string): string {
   return filePath.substring(0, filePath.lastIndexOf('/'));
 }
@@ -195,6 +198,27 @@ export function saveFilesIntoEmscriptenFS(
 
       FS.writeFile(`${prefix}/${filename}`, files[filename]);
     });
+  } catch (error: any) {
+    throw new Error(error?.message);
+  }
+}
+
+export function removeFilesFromEmscriptenFS(FS: any, paths: any): void {
+  try {
+    const pwd = FS.cwd();
+    FS.chdir('/');
+    Object.keys(paths).forEach(filename => {
+      const path = paths[filename];
+      const pathInfo = FS.analyzePath(path);
+      if (pathInfo.exists) {
+        if (pathInfo.isDir) {
+          FS.rmdir(path);
+        } else {
+          FS.unlink(path);
+        }
+      }
+    });
+    FS.chdir(pwd);
   } catch (error: any) {
     throw new Error(error?.message);
   }
