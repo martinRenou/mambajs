@@ -283,13 +283,7 @@ export async function solve(
   let pipPackages: ISolvedPackages = {};
 
   logger?.log('Solved environment!');
-  for (const solvedPackage of Object.values(condaPackages)) {
-    logger?.log(
-      solvedPackage.name,
-      solvedPackage.version,
-      solvedPackage.build_string
-    );
-  }
+  showPackagesList(condaPackages, logger);
 
   if (typeof ymlOrSpecs === 'string') {
     if (hasPipDependencies(ymlOrSpecs)) {
@@ -333,4 +327,38 @@ export async function solve(
     condaPackages,
     pipPackages
   };
+}
+
+export function showPackagesList(
+  installedPackages: ISolvedPackages,
+  logger: ILogger | undefined
+) {
+  if (Object.keys(installedPackages).length) {
+    const sortedPackages = sort(installedPackages);
+
+    const nameWidth = 30;
+    const versionWidth = 30;
+    const buildWidth = 30;
+
+    logger?.log(
+      `${'Name'.padEnd(nameWidth)}${'Version'.padEnd(versionWidth)}${'Build'.padEnd(buildWidth)}`
+    );
+
+    logger?.log('─'.repeat(nameWidth + versionWidth + buildWidth));
+
+    for (const [, pkg] of sortedPackages) {
+      const text = `${pkg.name.padEnd(nameWidth)}${pkg.version.padEnd(versionWidth)}${pkg.build_string?.padEnd(buildWidth)}`;
+      logger?.log(text);
+    }
+  }
+}
+
+export function sort(installed: ISolvedPackages): Map<string, any> {
+  const sorted = Object.entries(installed).sort((a, b) => {
+    const packageA: any = a[1];
+    const packageB: any = b[1];
+    return packageA.name.localeCompare(packageB.name);
+  });
+
+  return new Map(sorted);
 }
