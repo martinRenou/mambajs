@@ -138,11 +138,8 @@ export const getSolvedPackages = async (
   } else {
     const pkgs = splitPipPackages(installedPackages);
     installedCondaPackages = pkgs.installedCondaPackages;
-    specs = prepareSpecsForInstalling(
-      installedCondaPackages,
-      ymlOrSpecs as string[]
-    );
     newChannels = formatChannels(channels);
+    specs = ymlOrSpecs as string[];
   }
 
   if (logger) {
@@ -214,20 +211,4 @@ const formatChannels = (channels?: string[]) => {
 
 const normalizeUrl = (url: string) => {
   return url.replace(/[\/\s]+$/, '');
-};
-
-export const prepareSpecsForInstalling = (
-  condaPackages: ISolvedPackages,
-  specs: Array<string>
-) => {
-  Object.keys(condaPackages).map((filename: string) => {
-    const installedPackage = condaPackages[filename];
-    if (installedPackage.name === 'python') {
-      specs.push(`${installedPackage.name}=${installedPackage.version}`);
-    } else {
-      specs.push(`${installedPackage.name}`);
-    }
-  });
-
-  return specs;
 };
