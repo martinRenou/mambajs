@@ -58,7 +58,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@emscripten-forge/mambajs-core@npm:^0.14.0, @emscripten-forge/mambajs-core@workspace:packages/mambajs-core":
+"@emscripten-forge/mambajs-core@npm:^0.15.0, @emscripten-forge/mambajs-core@workspace:packages/mambajs-core":
   version: 0.0.0-use.local
   resolution: "@emscripten-forge/mambajs-core@workspace:packages/mambajs-core"
   dependencies:
@@ -99,7 +99,7 @@ __metadata:
   resolution: "@emscripten-forge/mambajs@workspace:packages/mambajs"
   dependencies:
     "@conda-org/rattler": "npm:^0.3.1"
-    "@emscripten-forge/mambajs-core": "npm:^0.14.0"
+    "@emscripten-forge/mambajs-core": "npm:^0.15.0"
     "@esbuild-plugins/node-globals-polyfill": "npm:^0.2.3"
     "@esbuild-plugins/node-modules-polyfill": "npm:^0.2.2"
     esbuild: "npm:^0.24.0"
