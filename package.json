@@ -10,7 +10,8 @@
     "prettier": "prettier --list-different --write \"packages/**/*.ts\"",
     "prettier:check": "prettier --check \"packages/**/*.ts\"",
     "eslint": "eslint --ext .ts --fix .",
-    "eslint:check": "eslint --ext .ts."
+    "eslint:check": "eslint --ext .ts.",
+    "test": "npx tsc -p tests && node tests/runner.js"
   },
   "workspaces": {
     "packages": [
