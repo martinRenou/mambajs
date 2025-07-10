@@ -16,7 +16,7 @@ defaults:
 
 jobs:
 
-  build:
+  lint:
 
     runs-on: ubuntu-latest
 
@@ -32,46 +32,33 @@ jobs:
           environment-file: environment.yml
           environment-name: mambajs
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Run eslint
+        run: yarn run eslint:check
+
+  unittest:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install micromamba
+        uses: mamba-org/setup-micromamba@v1
         with:
-          node-version: '16'
+          environment-file: environment.yml
+          environment-name: mambajs
 
       - name: Install dependencies
         run: yarn install
 
       - name: Build mambajs
-        run: |
-          yarn run build
-
-      - name: Run eslint
-        run: |
-          yarn run eslint
-
-  test:
-
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install micromamba
-        uses: mamba-org/setup-micromamba@v1
-        with:
-          environment-file: environment.yml
-          environment-name: mambajs
-
-      - name: Install dependencies
-        run: |
-          yarn install
-
-      - name: Build mambajs
-        run: |
-          yarn run build
+        run: yarn run build
 
       - name: Run tests
-        run: |
-          npm run test
+        run: yarn run test
