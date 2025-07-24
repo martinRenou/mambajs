@@ -188,33 +188,37 @@ async function processRequirement(
     delete installPipPackagesLookup[requirement.package];
     delete installedWheels[requirement.package];
   }
+
+  const requiresDist = pkgMetadata.info.requires_dist as string[] | undefined;
+
+  const filteredRequiresDist = (requiresDist || []).filter(raw => {
+    const [, envMarker] = raw.split(';').map(s => s.trim());
+    if (!envMarker) return true;
+    return requirement.extras?.some(extra =>
+      envMarker.includes(`extra == "${extra}"`)
+    );
+  });
+
   pipSolvedPackages[solved.name] = {
     name: requirement.package,
     version: solved.version,
     url: solved.url,
-    repo_name: 'PyPi'
+    repo_name: 'PyPi',
+    depends: filteredRequiresDist
+      .map(r => r.split(';')[0].trim())
+      .map(spec => packageNameFromSpec(spec))
+      .filter((name): name is string => !!name)
   };
   installedWheels[requirement.package] = solved.name;
   installPipPackagesLookup[requirement.package] =
     pipSolvedPackages[solved.name];
 
-  const requiresDist = pkgMetadata.info.requires_dist as string[] | undefined;
-  if (!requiresDist) {
+  if (!filteredRequiresDist) {
     return;
   }
 
-  for (const raw of requiresDist) {
-    const [requirements, envMarker] = raw.split(';').map(s => s.trim());
-
-    // Filter out extras not explicitly requested
-    if (
-      envMarker &&
-      !requirement.extras?.some(extra =>
-        envMarker.includes(`extra == "${extra}"`)
-      )
-    ) {
-      continue;
-    }
+  for (const raw of filteredRequiresDist) {
+    const [requirements] = raw.split(';').map(s => s.trim());
 
     const parsedRequirement = parsePyPiRequirement(requirements);
     if (!parsedRequirement) {
