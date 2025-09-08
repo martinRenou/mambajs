@@ -1,69 +1,82 @@
 import {
+  computePackageChannel,
+  computePackageUrl,
+  DEFAULT_PLATFORM,
+  formatChannels,
+  ILock,
   ILogger,
   ISolvedPackages,
-  parseEnvYml,
-  splitPipPackages
+  parseEnvYml
 } from '@emscripten-forge/mambajs-core';
 import { Platform, simpleSolve, SolvedPackage } from '@conda-org/rattler';
 
-const PLATFORMS: Platform[] = ['noarch', 'emscripten-wasm32'];
-const DEFAULT_CHANNELS = [
-  'https://repo.prefix.dev/emscripten-forge-dev',
-  'https://repo.prefix.dev/conda-forge'
-];
-const ALIAS = ['conda-forge', 'emscripten-forge-dev'];
-const CHANNEL_ALIASES = {
-  'emscripten-forge-dev': 'https://repo.prefix.dev/emscripten-forge-dev',
-  'conda-forge': 'https://repo.prefix.dev/conda-forge'
-};
-
 export interface ISolveOptions {
   ymlOrSpecs?: string | string[];
-  installedPackages?: ISolvedPackages;
   pipSpecs?: string[];
-  channels?: string[];
+  platform?: Platform;
+  currentLock?: ILock;
   logger?: ILogger;
 }
 
-const solve = async (
-  specs: Array<string>,
-  channels: Array<string>,
-  installedCondaPackages: ISolvedPackages,
-  logger?: ILogger
-) => {
-  let result: SolvedPackage[] | undefined = undefined;
-  const solvedPackages: ISolvedPackages = {};
+export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
+  const { ymlOrSpecs, currentLock, logger } = options;
+  const platform = options.platform ?? DEFAULT_PLATFORM;
+
+  const condaPackages: ISolvedPackages = {};
+
+  let specs: string[] = [],
+    formattedChannels: Pick<ILock, 'channels' | 'channelPriority'> = {
+      channelPriority: [],
+      channels: {}
+    };
+  let installedCondaPackages: ISolvedPackages = {};
+
+  // It's an environment creation from environment definition, currentLock is not a thing
+  if (typeof ymlOrSpecs === 'string') {
+    const ymlData = parseEnvYml(ymlOrSpecs);
+    specs = ymlData.specs;
+    formattedChannels = formatChannels(ymlData.channels);
+  } else {
+    installedCondaPackages = currentLock?.packages ?? {};
+    formattedChannels = currentLock!;
+    specs = ymlOrSpecs as string[];
+  }
+
+  if (logger) {
+    logger.log('Solving environment...');
+  }
+
   try {
-    let installed: any = [];
-    if (Object.keys(installedCondaPackages).length) {
-      Object.keys(installedCondaPackages).map((filename: string) => {
-        const installedPkg = installedCondaPackages[filename];
-        if (installedPkg.url) {
-          const tmpPkg = {
-            ...installedPkg,
-            packageName: installedPkg.name,
-            repoName: installedPkg.repo_name,
-            build: installedPkg.build_string,
-            buildNumber: installedPkg.build_number
-              ? BigInt(installedPkg.build_number)
-              : undefined,
-            filename
-          };
-
-          installed.push(tmpPkg);
-        }
-      });
-    } else {
-      installed = undefined;
-    }
-
     const startSolveTime = performance.now();
-    result = (await simpleSolve(
+
+    const result = (await simpleSolve(
       specs,
-      channels,
-      PLATFORMS,
-      installed
+      formattedChannels.channelPriority.map(channelName => {
+        // TODO Support picking mirror
+        // Always picking the first mirror for now
+        return formattedChannels.channels[channelName][0].url;
+      }),
+      ['noarch', platform],
+      Object.keys(installedCondaPackages).map((filename: string) => {
+        // Turn mambajs lock definition into what rattler expects
+        const installedPkg = installedCondaPackages[filename];
+        return {
+          ...installedPkg,
+          packageName: installedPkg.name,
+          repoName: installedPkg.channel,
+          buildNumber: installedPkg.buildNumber
+            ? BigInt(installedPkg.buildNumber)
+            : undefined,
+          filename,
+          url: computePackageUrl(
+            installedPkg,
+            filename,
+            formattedChannels.channels
+          )
+        };
+      })
     )) as SolvedPackage[];
+
     const endSolveTime = performance.now();
     if (logger) {
       logger.log(
@@ -76,124 +89,58 @@ const solve = async (
         filename,
         packageName,
         repoName,
-        url,
         version,
         build,
         buildNumber,
-        depends,
         subdir
       } = item;
-      solvedPackages[filename] = {
+      condaPackages[filename] = {
         name: packageName,
-        repo_url: repoName,
-        build_string: build,
-        url: url,
+        build: build,
         version: version,
-        repo_name: repoName,
-        build_number:
+        channel: repoName ?? '',
+        buildNumber:
           buildNumber && buildNumber <= BigInt(Number.MAX_SAFE_INTEGER)
             ? Number(buildNumber)
             : undefined,
-        depends,
         subdir
       };
     });
-  } catch (error) {
-    logger?.error(error);
-    throw new Error(error as string);
-  }
-
-  return solvedPackages;
-};
-
-export const getSolvedPackages = async (
-  options: ISolveOptions
-): Promise<ISolvedPackages> => {
-  const { ymlOrSpecs, installedPackages, channels, logger } = options;
-  let solvedPackages: ISolvedPackages = {};
-
-  let specs: string[] = [],
-    newChannels: string[] = [];
-  let installedCondaPackages: ISolvedPackages = {};
-
-  if (typeof ymlOrSpecs === 'string') {
-    const ymlData = parseEnvYml(ymlOrSpecs);
-    specs = ymlData.specs;
-    newChannels = formatChannels(ymlData.channels);
-  } else {
-    const pkgs = splitPipPackages(installedPackages);
-    installedCondaPackages = pkgs.installedCondaPackages;
-    newChannels = formatChannels(channels);
-    specs = ymlOrSpecs as string[];
-  }
-
-  if (logger) {
-    logger.log('Solving environment...');
-  }
-
-  try {
-    solvedPackages = await solve(
-      specs,
-      newChannels,
-      installedCondaPackages,
-      logger
-    );
   } catch (error: any) {
+    logger?.error(error);
     throw new Error(error.message);
   }
-  return solvedPackages;
-};
 
-const getChannelsAlias = (channelNames: string[]) => {
-  const channels = channelNames.map((channel: string) => {
-    if (CHANNEL_ALIASES[channel]) {
-      channel = CHANNEL_ALIASES[channel];
+  // Turn the rattler result into what the lock expects
+  const packages: ILock['packages'] = {};
+  Object.keys(condaPackages).forEach(filename => {
+    const pkg = condaPackages[filename];
+
+    const channel = computePackageChannel(pkg, formattedChannels);
+
+    if (!channel) {
+      throw new Error(
+        `Failed to detect channel from ${pkg} (${pkg.channel}), with known channels ${formattedChannels.channelPriority}`
+      );
     }
-    return channel;
+
+    packages[filename] = {
+      name: pkg.name,
+      buildNumber: pkg.buildNumber,
+      build: pkg.build,
+      version: pkg.version,
+      subdir: pkg.subdir,
+      channel
+    };
   });
 
-  return channels;
-};
-
-const formatChannels = (channels?: string[]) => {
-  if (!channels || !channels.length) {
-    channels = [...DEFAULT_CHANNELS];
-  } else {
-    channels = Array.from(new Set([...channels, ...DEFAULT_CHANNELS]));
-  }
-  let hasAlias = false;
-  let hasDefault = false;
-  const aliasChannelsNames: string[] = [];
-
-  const filteredChannels = new Set<string>();
-  channels.forEach((channel: string) => {
-    if (ALIAS.includes(channel)) {
-      hasAlias = true;
-      aliasChannelsNames.push(channel);
-    }
-
-    if (channel === 'defaults') {
-      hasDefault = true;
-    }
-
-    if (channel !== 'defaults' && !ALIAS.includes(channel) && channel) {
-      filteredChannels.add(normalizeUrl(channel));
-    }
-  });
-
-  channels = [...filteredChannels];
-  if (hasDefault) {
-    channels = Array.from(new Set([...channels, ...DEFAULT_CHANNELS]));
-  }
-  if (hasAlias) {
-    channels = Array.from(
-      new Set([...channels, ...getChannelsAlias(aliasChannelsNames)])
-    );
-  }
-
-  return channels;
-};
-
-const normalizeUrl = (url: string) => {
-  return url.replace(/[\/\s]+$/, '');
+  return {
+    'lock.version': '1.0.0',
+    platform: options.platform as ILock['platform'],
+    specs,
+    channels: formattedChannels.channels,
+    channelPriority: formattedChannels.channelPriority,
+    packages,
+    pipPackages: currentLock?.pipPackages ?? {}
+  };
 };
