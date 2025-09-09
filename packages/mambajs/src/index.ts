@@ -33,34 +33,30 @@ export async function solve(options: ISolveOptions): Promise<ILock> {
 
   // Run conda solver first
   if (ymlOrSpecs && ymlOrSpecs.length) {
-    try {
-      newLock = await solveConda(options);
-      condaPackages = newLock.packages;
-      pythonVersion = getPythonVersion(Object.values(condaPackages));
+    newLock = await solveConda(options);
+    condaPackages = newLock.packages;
+    pythonVersion = getPythonVersion(Object.values(condaPackages));
 
-      // Remove pip packages if they are now coming from conda
-      // Here we try our best given the possible mismatches between pip package names and conda names
-      for (const condaPackage of Object.values(condaPackages)) {
-        const pipName = await getPipPackageName(condaPackage.name);
-        if (installedWheels[pipName]) {
-          delete installedPipPackages[installedWheels[pipName]];
-        }
-        if (installedWheels[condaPackage.name]) {
-          delete installedPipPackages[installedWheels[condaPackage.name]];
-        }
+    // Remove pip packages if they are now coming from conda
+    // Here we try our best given the possible mismatches between pip package names and conda names
+    for (const condaPackage of Object.values(condaPackages)) {
+      const pipName = await getPipPackageName(condaPackage.name);
+      if (installedWheels[pipName]) {
+        delete installedPipPackages[installedWheels[pipName]];
       }
+      if (installedWheels[condaPackage.name]) {
+        delete installedPipPackages[installedWheels[condaPackage.name]];
+      }
+    }
 
-      if (!currentLock) {
-        showPackagesList({ packages: condaPackages, pipPackages: {} }, logger);
-      } else {
-        showEnvironmentDiff(
-          currentLock,
-          { packages: condaPackages, pipPackages: {} },
-          logger
-        );
-      }
-    } catch (error: any) {
-      throw new Error(error.message);
+    if (!currentLock) {
+      showPackagesList({ packages: condaPackages, pipPackages: {} }, logger);
+    } else {
+      showEnvironmentDiff(
+        currentLock,
+        { packages: condaPackages, pipPackages: {} },
+        logger
+      );
     }
   }
 
@@ -135,10 +131,10 @@ export async function install(
   // Merge existing channels with new ones
   const newChannels = formatChannels(channels);
 
-  for (const channel of newChannels.channelPriority) {
-    if (!env.channelPriority.includes(channel)) {
-      env.channelPriority.push(channel);
-      env.channels[channel] = newChannels.channels[channel];
+  for (const channel of newChannels.channels) {
+    if (!env.channels.includes(channel)) {
+      env.channels.push(channel);
+      env.channelInfo[channel] = newChannels.channelInfo[channel];
     }
   }
 
@@ -146,7 +142,7 @@ export async function install(
   const newSpecs = Array.from(new Set([...env.specs, ...(specs || [])]));
 
   logger?.log(`Specs: ${newSpecs.join(', ')}`);
-  logger?.log(`Channels: ${newChannels.channelPriority.join(', ')}`);
+  logger?.log(`Channels: ${newChannels.channels.join(', ')}`);
   logger?.log('');
 
   return await solve({
@@ -215,7 +211,7 @@ export async function remove(
   );
 
   logger?.log(`Specs: ${newSpecs.join(', ')}`);
-  logger?.log(`Channels: ${env.channelPriority.join(', ')}`);
+  logger?.log(`Channels: ${env.channels.join(', ')}`);
   logger?.log('');
 
   return await solve({

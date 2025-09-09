@@ -27,9 +27,9 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
   const condaPackages: ISolvedPackages = {};
 
   let specs: string[] = [],
-    formattedChannels: Pick<ILock, 'channels' | 'channelPriority'> = {
-      channelPriority: [],
-      channels: {}
+    formattedChannels: Pick<ILock, 'channels' | 'channelInfo'> = {
+      channels: [],
+      channelInfo: {}
     };
   let installedCondaPackages: ISolvedPackages = {};
 
@@ -53,10 +53,10 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
 
     const result = (await simpleSolve(
       specs,
-      formattedChannels.channelPriority.map(channelName => {
+      formattedChannels.channels.map(channelName => {
         // TODO Support picking mirror
         // Always picking the first mirror for now
-        return formattedChannels.channels[channelName][0].url;
+        return formattedChannels.channelInfo[channelName][0].url;
       }),
       ['noarch', platform],
       Object.keys(installedCondaPackages).map((filename: string) => {
@@ -73,7 +73,7 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
           url: computePackageUrl(
             installedPkg,
             filename,
-            formattedChannels.channels
+            formattedChannels.channelInfo
           )
         };
       })
@@ -116,6 +116,7 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
       message = error.message;
     }
 
+    // Retry 3 times on flaky request error
     if (message.includes('error sending request')) {
       if (nRetries !== 0) {
         logger?.warn(message);
@@ -136,7 +137,7 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
 
     if (!channel) {
       throw new Error(
-        `Failed to detect channel from ${pkg} (${pkg.channel}), with known channels ${formattedChannels.channelPriority}`
+        `Failed to detect channel from ${pkg} (${pkg.channel}), with known channels ${formattedChannels.channels}`
       );
     }
 
@@ -155,7 +156,7 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     platform,
     specs,
     channels: formattedChannels.channels,
-    channelPriority: formattedChannels.channelPriority,
+    channelInfo: formattedChannels.channelInfo,
     packages,
     pipPackages: currentLock?.pipPackages ?? {}
   };
