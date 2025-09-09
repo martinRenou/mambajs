@@ -54,7 +54,7 @@ export async function solve(options: ISolveOptions): Promise<ILock> {
     } else {
       showEnvironmentDiff(
         currentLock,
-        { packages: condaPackages, pipPackages: {} },
+        { packages: condaPackages, pipPackages: currentLock.pipPackages },
         logger
       );
     }
@@ -283,7 +283,8 @@ export async function pipUninstall(
     logger?.log(`Successfully uninstalled ${pkg}`);
   });
 
-  env.pipPackages = newPipPackages;
-
-  return env;
+  return {
+    ...env,
+    pipPackages: newPipPackages
+  };
 }
