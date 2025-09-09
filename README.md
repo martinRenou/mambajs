@@ -11,5 +11,6 @@ yarn
 npx lerna version --no-private
 # Push main branch and tag
 yarn run build
+# For each packages/*
 npm publish
 ```
