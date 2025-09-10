@@ -10,7 +10,7 @@
 - [What Mambajs is NOT](#what-mambajs-is-not-yet)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Filesystem Operations](#filesystem-operations)  
+- [Filesystem Operations](#filesystem-operations)
 - [Working with Lock Files](#working-with-lock-files)
 - [Advanced Usage](#advanced-usage)
 - [API Reference](#api-reference)
@@ -23,7 +23,7 @@
 Mambajs is a powerful toolbox designed for manipulating conda environment definitions, with first-class support for:
 
 - **Conda package management**: Create, solve, install, and remove conda packages
-- **Pip package support**: Install and manage pip packages alongside conda packages  
+- **Pip package support**: Install and manage pip packages alongside conda packages
 - **Emscripten/WebAssembly environments**: Built with `emscripten-wasm32` platform in mind
 - **Filesystem operations**: Tools for installing/uninstalling packages into an Emscripten FS
 - **Python environment bootstrapping**: Spawn Python interpreters and load shared libraries
@@ -57,7 +57,7 @@ import { create } from '@emscripten-forge/mambajs';
 
 const yml = `
 channels:
-  - https://prefix.dev/emscripten-forge-dev  
+  - https://prefix.dev/emscripten-forge-dev
   - https://prefix.dev/conda-forge
 dependencies:
   - python=3.11
@@ -88,7 +88,7 @@ const updatedEnv = await install(
   console                   // logger (optional)
 );
 
-// Remove conda packages  
+// Remove conda packages
 const envAfterRemoval = await remove(
   ['scipy'],    // packages to remove
   updatedEnv,   // current environment
@@ -105,7 +105,7 @@ const envWithPip = await pipInstall(
 // Uninstall pip packages
 const envWithoutPip = await pipUninstall(
   ['requests'],
-  envWithPip, 
+  envWithPip,
   console
 );
 ```
@@ -115,9 +115,9 @@ const envWithoutPip = await pipUninstall(
 ### Bootstrap Environment in Emscripten FS
 
 ```typescript
-import { 
+import {
   bootstrapEmpackPackedEnvironment,
-  installPackagesToEmscriptenFS 
+  installPackagesToEmscriptenFS
 } from '@emscripten-forge/mambajs';
 
 
@@ -152,7 +152,7 @@ await bootstrapPython({
 // Load shared libraries
 await loadSharedLibs({
   sharedLibs: installedData.sharedLibs,
-  prefix: '/opt/conda', 
+  prefix: '/opt/conda',
   Module: EmscriptenModule,
   logger: console
 });
@@ -171,7 +171,7 @@ for (const [filename, pkg] of Object.entries(lock.packages)) {
   console.log(`${pkg.name}@${pkg.version} from ${pkg.channel}`);
 }
 
-// Iterate through pip packages  
+// Iterate through pip packages
 for (const [filename, pkg] of Object.entries(lock.pipPackages)) {
   console.log(`${pkg.name}@${pkg.version} from ${pkg.registry}`);
 }
@@ -189,14 +189,14 @@ console.log('Platform:', lock.platform); // 'emscripten-wasm32'
 import { ILogger } from '@emscripten-forge/mambajs';
 
 class CustomLogger implements ILogger {
-  log(...msg: any[]) { 
-    console.log('[INFO]', ...msg); 
+  log(...msg: any[]) {
+    console.log('[INFO]', ...msg);
   }
-  warn(...msg: any[]) { 
-    console.warn('[WARN]', ...msg); 
+  warn(...msg: any[]) {
+    console.warn('[WARN]', ...msg);
   }
-  error(...msg: any[]) { 
-    console.error('[ERROR]', ...msg); 
+  error(...msg: any[]) {
+    console.error('[ERROR]', ...msg);
   }
 }
 
@@ -224,7 +224,7 @@ showEnvironmentDiff(oldEnv, newEnv, console);
 
 - **`solve(options)`**: Core solving function with full control
 - **`create(yml, logger?)`**: Create environment from environment.yml
-- **`install(specs, env, channels?, logger?)`**: Install conda packages  
+- **`install(specs, env, channels?, logger?)`**: Install conda packages
 - **`remove(packages, env, logger?)`**: Remove conda packages
 - **`pipInstall(specs, env, logger?)`**: Install pip packages
 - **`pipUninstall(packages, env, logger?)`**: Uninstall pip packages
@@ -264,7 +264,7 @@ yarn install
 # Build all packages
 yarn build
 
-# Run tests  
+# Run tests
 yarn test
 
 # Lint code
@@ -286,7 +286,7 @@ npm publish
 
 Mambajs is designed primarily for WebAssembly/Emscripten environments but can work in Node.js for lock file manipulation.
 
-**Default Platform**: `emscripten-wasm32`  
+**Default Platform**: `emscripten-wasm32`
 **Default Channels**: `emscripten-forge` (https://prefix.dev/emscripten-forge-dev), `conda-forge` (https://prefix.dev/conda-forge)
 
 ## License
