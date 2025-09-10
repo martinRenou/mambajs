@@ -34,7 +34,7 @@ Backed by [rattler](https://github.com/conda-incubator/rattler) for conda packag
 ## What Mambajs is NOT (yet)
 
 - **Not a replacement** for micromamba or rattler CLIs
-- **Lock file focused**: The `install`/`remove`/`pipInstall`/`pipUninstall` functions manipulate conda lock definitions (lock input → lock output). They don't actually install/uninstall packages - it's up to you to handle the actual package installation where and how you want.
+- **Does not install packages for you**: The `install`/`remove`/`pipInstall`/`pipUninstall` are "lock file focused" functions that manipulate conda lock definitions (lock input → lock output). They don't actually install/uninstall packages - it's up to you to handle the actual package installation where and how you want. We do provide some utility functions to install packages in an Emscripten FS though.
 
 ## Installation
 
