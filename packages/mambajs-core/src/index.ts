@@ -18,7 +18,6 @@ import {
   IBootstrapData,
   IEmpackEnvMeta,
   IEmpackEnvMetaMountPoint,
-  IEmpackEnvMetaPkg,
   IInstalledData,
   ILock,
   ILogger,
@@ -35,17 +34,21 @@ export * from './helper';
 export * from './parser';
 
 /**
- * Given a list of packages from a lock file, get the Python version
- * @param packages
+ * Given a lock file, get the Python version
+ * @param lock representation
  * @returns The Python version as a list of numbers if it is there
  */
 export function getPythonVersion(
-  packages: IEmpackEnvMetaPkg[] | ISolvedPackage[]
+  lock?: Pick<ILock, 'packages'>
 ): number[] | undefined {
-  let pythonPackage: IEmpackEnvMetaPkg | ISolvedPackage | undefined = undefined;
-  for (let i = 0; i < packages.length; i++) {
-    if (packages[i].name == 'python') {
-      pythonPackage = packages[i];
+  if (!lock) {
+    return undefined;
+  }
+
+  let pythonPackage: ISolvedPackage | undefined = undefined;
+  for (const pkg of Object.values(lock.packages)) {
+    if (pkg.name == 'python') {
+      pythonPackage = pkg;
       break;
     }
   }
@@ -263,7 +266,7 @@ export async function installPackagesToEmscriptenFS(
   const sharedLibsMap: TSharedLibsMap = {};
   const pythonVersion = options.pythonVersion
     ? options.pythonVersion
-    : getPythonVersion(Object.values(condaPackages));
+    : getPythonVersion(packages);
   const paths = {};
 
   const processExtractedPackage = (
