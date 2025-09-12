@@ -15,10 +15,13 @@ import { version } from '../package.json';
 // For backward compat
 export * from '@emscripten-forge/mambajs-core';
 
+function logBanner(logger?: ILogger) {
+  logger?.log(`mambajs ${version}`);
+  logger?.log('');
+}
+
 export async function solve(options: ISolveOptions): Promise<ILock> {
   const { logger, ymlOrSpecs, pipSpecs, currentLock } = options;
-
-  logger?.log(`mambajs ${version}`);
 
   const installedCondaPackages = currentLock?.packages ?? {};
   const installedPipPackages = currentLock?.pipPackages
@@ -115,6 +118,8 @@ export async function solve(options: ISolveOptions): Promise<ILock> {
  * @returns the solved environment
  */
 export async function create(yml: string, logger?: ILogger): Promise<ILock> {
+  logBanner(logger);
+
   return await solve({ ymlOrSpecs: yml, logger });
 }
 
@@ -132,6 +137,8 @@ export async function install(
   channels?: string[],
   logger?: ILogger
 ): Promise<ILock> {
+  logBanner(logger);
+
   // Merge existing channels with new ones
   const newChannels = formatChannels(channels);
 
@@ -168,6 +175,8 @@ export async function remove(
   env: ILock,
   logger?: ILogger
 ): Promise<ILock> {
+  logBanner(logger);
+
   // Get packages for which we have specs already
   const specsPackages = new Set(
     env.specs.map(spec => packageNameFromSpec(spec))
@@ -237,6 +246,8 @@ export async function pipInstall(
   env: ILock,
   logger?: ILogger
 ): Promise<ILock> {
+  logBanner(logger);
+
   return await solve({
     pipSpecs: specs,
     currentLock: env,
@@ -256,6 +267,8 @@ export async function pipUninstall(
   env: ILock,
   logger?: ILogger
 ): Promise<ILock> {
+  logBanner(logger);
+
   const newPipPackages = { ...env.pipPackages };
 
   // Mapping: installed package name -> dist filename
