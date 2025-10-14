@@ -84,7 +84,21 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     }
 
     result.map(item => {
-      const { filename, packageName, repoName, version, build, subdir } = item;
+      const {
+        filename,
+        packageName,
+        repoName,
+        version,
+        build,
+        subdir,
+        md5,
+        sha256
+      } = item;
+
+      const hash: ILock['packages'][string]['hash'] = {};
+      if (md5) hash.md5 = md5;
+      if (sha256) hash.sha256 = sha256;
+
       condaPackages[filename] = {
         name: packageName,
         build: build,
@@ -92,6 +106,10 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
         channel: repoName ?? '',
         subdir
       };
+
+      if (Object.keys(hash).length) {
+        condaPackages[filename].hash = hash;
+      }
     });
   } catch (error) {
     let message: string = 'Unknown error';
@@ -133,10 +151,14 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
       subdir: pkg.subdir,
       channel
     };
+
+    if (pkg.hash) {
+      packages[filename].hash = pkg.hash;
+    }
   });
 
   return {
-    lockVersion: '1.0.0',
+    lockVersion: '1.0.1',
     platform,
     specs,
     channels: formattedChannels.channels,
