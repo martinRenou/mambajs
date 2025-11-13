@@ -72,6 +72,15 @@ interface ISpec {
   package: string;
   constraints: string | null;
   extras?: string[];
+  isGitHub?: boolean;
+  gitHubUrl?: string;
+  gitHubRef?: string;
+}
+
+interface IGitHubPackageInfo {
+  name: string;
+  version: string;
+  dependencies: string[];
 }
 
 interface IWheelInfo {
@@ -254,7 +263,219 @@ function resolveVersion(availableVersions: string[], constraint: string) {
     : validVersions[0] || undefined;
 }
 
+function decodeBase64(base64: string): string {
+  // Simple base64 decoder for fallback
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let output = '';
+  let i = 0;
+
+  // Remove non-base64 characters
+  base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+
+  while (i < base64.length) {
+    const enc1 = chars.indexOf(base64.charAt(i++));
+    const enc2 = chars.indexOf(base64.charAt(i++));
+    const enc3 = chars.indexOf(base64.charAt(i++));
+    const enc4 = chars.indexOf(base64.charAt(i++));
+
+    const chr1 = (enc1 << 2) | (enc2 >> 4);
+    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+    const chr3 = ((enc3 & 3) << 6) | enc4;
+
+    output += String.fromCharCode(chr1);
+
+    if (enc3 !== 64) {
+      output += String.fromCharCode(chr2);
+    }
+    if (enc4 !== 64) {
+      output += String.fromCharCode(chr3);
+    }
+  }
+
+  return output;
+}
+
+function parseGitHubUrl(url: string): {
+  owner: string;
+  repo: string;
+  ref: string;
+} | null {
+  // Match git+https://github.com/owner/repo@ref or git+https://github.com/owner/repo.git@ref
+  const match = url.match(
+    /^git\+https:\/\/github\.com\/([^\/]+)\/([^@\/]+?)(?:\.git)?@(.+)$/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    owner: match[1],
+    repo: match[2],
+    ref: match[3]
+  };
+}
+
+async function fetchGitHubPackageInfo(
+  owner: string,
+  repo: string,
+  ref: string
+): Promise<IGitHubPackageInfo> {
+  // Try to fetch setup.py, setup.cfg, or pyproject.toml from the repository
+  const files = ['setup.py', 'setup.cfg', 'pyproject.toml'];
+  let packageInfo: IGitHubPackageInfo | null = null;
+
+  for (const file of files) {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${file}?ref=${ref}`
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const data = await response.json();
+      // Decode base64 content - handle both browser and Node.js
+      let content: string;
+      if (typeof atob !== 'undefined') {
+        content = atob(data.content);
+      } else {
+        // Fallback base64 decoding
+        content = decodeBase64(data.content);
+      }
+
+      if (file === 'setup.py') {
+        packageInfo = parseSetupPy(content);
+      } else if (file === 'setup.cfg') {
+        packageInfo = parseSetupCfg(content);
+      } else if (file === 'pyproject.toml') {
+        packageInfo = parsePyprojectToml(content);
+      }
+
+      if (packageInfo) {
+        break;
+      }
+    } catch (error) {
+      // Continue to next file
+      continue;
+    }
+  }
+
+  if (!packageInfo) {
+    throw new Error(
+      `Could not determine package metadata for ${owner}/${repo}@${ref}`
+    );
+  }
+
+  return packageInfo;
+}
+
+function parseSetupPy(content: string): IGitHubPackageInfo | null {
+  // Extract name using regex
+  const nameMatch = content.match(/name\s*=\s*['"]([\w-]+)['"]/);
+  const versionMatch = content.match(/version\s*=\s*['"]([\d.]+)['"]/);
+
+  if (!nameMatch) {
+    return null;
+  }
+
+  // Extract install_requires for dependencies
+  const dependencies: string[] = [];
+  const installRequiresMatch = content.match(
+    /install_requires\s*=\s*\[([\s\S]*?)\]/
+  );
+  if (installRequiresMatch) {
+    const depsContent = installRequiresMatch[1];
+    const depsMatches = depsContent.matchAll(/['"]([\w\->=<.,\s]+)['"]/g);
+    for (const match of depsMatches) {
+      dependencies.push(match[1].trim());
+    }
+  }
+
+  return {
+    name: nameMatch[1],
+    version: versionMatch ? versionMatch[1] : '0.0.0',
+    dependencies
+  };
+}
+
+function parseSetupCfg(content: string): IGitHubPackageInfo | null {
+  // Parse setup.cfg using simple regex
+  const nameMatch = content.match(/name\s*=\s*([\w-]+)/);
+  const versionMatch = content.match(/version\s*=\s*([\d.]+)/);
+
+  if (!nameMatch) {
+    return null;
+  }
+
+  // Extract install_requires
+  const dependencies: string[] = [];
+  const installRequiresMatch = content.match(
+    /install_requires\s*=\s*([\s\S]*?)(?:\n\n|\n\[|$)/
+  );
+  if (installRequiresMatch) {
+    const depsLines = installRequiresMatch[1].split('\n');
+    for (const line of depsLines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        dependencies.push(trimmed);
+      }
+    }
+  }
+
+  return {
+    name: nameMatch[1],
+    version: versionMatch ? versionMatch[1] : '0.0.0',
+    dependencies
+  };
+}
+
+function parsePyprojectToml(content: string): IGitHubPackageInfo | null {
+  // Simple TOML parsing for [project] or [tool.poetry] sections
+  const nameMatch =
+    content.match(/name\s*=\s*['"]([\w-]+)['"]/) ||
+    content.match(/\[project\][\s\S]*?name\s*=\s*['"]([\w-]+)['"]/);
+  const versionMatch =
+    content.match(/version\s*=\s*['"]([\d.]+)['"]/) ||
+    content.match(/\[project\][\s\S]*?version\s*=\s*['"]([\d.]+)['"]/);
+
+  if (!nameMatch) {
+    return null;
+  }
+
+  // Extract dependencies
+  const dependencies: string[] = [];
+  const depsMatch = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
+  if (depsMatch) {
+    const depsContent = depsMatch[1];
+    const depsMatches = depsContent.matchAll(/['"]([\w\->=<.,\s]+)['"]/g);
+    for (const match of depsMatches) {
+      dependencies.push(match[1].trim());
+    }
+  }
+
+  return {
+    name: nameMatch[1],
+    version: versionMatch ? versionMatch[1] : '0.0.0',
+    dependencies
+  };
+}
+
 export function parsePyPiRequirement(requirement: string): ISpec | null {
+  // Check if it's a GitHub URL
+  const gitHubUrlInfo = parseGitHubUrl(requirement);
+  if (gitHubUrlInfo) {
+    return {
+      package: '', // Will be filled later from GitHub API
+      constraints: null,
+      isGitHub: true,
+      gitHubUrl: requirement,
+      gitHubRef: gitHubUrlInfo.ref
+    };
+  }
+
   const extrasMatch = requirement.match(/^([^\[]+)\[([^\]]+)\]/);
   const packageName = extrasMatch
     ? extrasMatch[1]
@@ -399,6 +620,123 @@ export async function processRequirement(options: {
   const installedWheels = options.installedWheels ?? {};
   const installedCondaPackagesNames =
     options.installedCondaPackagesNames ?? new Set();
+
+  // Handle GitHub URLs
+  if (requirement.isGitHub && requirement.gitHubUrl) {
+    if (platform === 'emscripten-wasm32') {
+      const msg = `Cannot install from GitHub URL '${requirement.gitHubUrl}' on emscripten-wasm32 platform. GitHub packages require building from source which is not supported in WASM environments.`;
+      logger?.error(msg);
+      throw new Error(msg);
+    }
+
+    const gitHubUrlInfo = parseGitHubUrl(requirement.gitHubUrl);
+    if (!gitHubUrlInfo) {
+      const msg = `Invalid GitHub URL format: ${requirement.gitHubUrl}`;
+      logger?.error(msg);
+      throw new Error(msg);
+    }
+
+    try {
+      const gitHubPackageInfo = await fetchGitHubPackageInfo(
+        gitHubUrlInfo.owner,
+        gitHubUrlInfo.repo,
+        gitHubUrlInfo.ref
+      );
+
+      // Update requirement with package name from GitHub
+      requirement.package = gitHubPackageInfo.name;
+
+      // Check if already installed via conda
+      if (installedCondaPackagesNames.has(requirement.package)) {
+        logger?.log(
+          `Requirement ${requirement.package} already handled by conda/micromamba/mamba.`
+        );
+        return;
+      }
+
+      // Check if already installed via pip
+      const alreadyInstalled = installPipPackagesLookup[requirement.package];
+      if (alreadyInstalled) {
+        logger?.log(
+          `Requirement ${requirement.package} already satisfied with version ${alreadyInstalled.version}.`
+        );
+        return;
+      }
+
+      // Create a "wheel" entry for the GitHub package
+      // Use a pseudo-filename for tracking
+      const pseudoFilename = `${gitHubPackageInfo.name}-${gitHubPackageInfo.version}-github.whl`;
+
+      // Remove old version if exists
+      if (installPipPackagesLookup[requirement.package]) {
+        delete pipSolvedPackages[installedWheels[requirement.package]];
+        delete installPipPackagesLookup[requirement.package];
+        delete installedWheels[requirement.package];
+      }
+
+      pipSolvedPackages[pseudoFilename] = {
+        name: gitHubPackageInfo.name,
+        version: gitHubPackageInfo.version,
+        url: requirement.gitHubUrl,
+        registry: 'GitHub'
+      };
+      installedWheels[requirement.package] = pseudoFilename;
+      installPipPackagesLookup[requirement.package] =
+        pipSolvedPackages[pseudoFilename];
+
+      // Process dependencies
+      for (const dep of gitHubPackageInfo.dependencies) {
+        const parsedDep = parsePyPiRequirement(dep);
+        if (!parsedDep) {
+          continue;
+        }
+
+        // Check if dependency is already satisfied
+        if (installedCondaPackagesNames.has(parsedDep.package)) {
+          if (!warnedPackages.has(parsedDep.package)) {
+            logger?.log(`Requirement ${parsedDep.package} already satisfied.`);
+          }
+          warnedPackages.add(parsedDep.package);
+          continue;
+        }
+
+        const alreadyInstalledDep = installPipPackagesLookup[parsedDep.package];
+        if (
+          alreadyInstalledDep &&
+          (!parsedDep.constraints ||
+            satisfies(alreadyInstalledDep.version, parsedDep.constraints))
+        ) {
+          if (!warnedPackages.has(parsedDep.package)) {
+            logger?.log(
+              `Requirement ${parsedDep.package}${parsedDep.constraints || ''} already satisfied.`
+            );
+          }
+          warnedPackages.add(parsedDep.package);
+          continue;
+        }
+
+        // Recursively process the dependency
+        await processRequirement({
+          requirement: parsedDep,
+          warnedPackages,
+          pipSolvedPackages,
+          installedCondaPackagesNames,
+          installedWheels,
+          installPipPackagesLookup,
+          logger,
+          pythonVersion,
+          required: false,
+          platform
+        });
+      }
+
+      return;
+    } catch (error: any) {
+      const msg = `Failed to resolve GitHub package ${requirement.gitHubUrl}: ${error.message || error}`;
+      logger?.error(msg);
+      throw new Error(msg);
+    }
+  }
 
   const pkgMetadata = await (
     await fetch(`https://pypi.org/pypi/${requirement.package}/json`)
