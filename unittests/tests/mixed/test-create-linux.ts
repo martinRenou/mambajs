@@ -8,9 +8,15 @@ const yml = `
 channels:
   - https://prefix.dev/conda-forge
 dependencies:
-  - pandas
+  - python
   - xeus-python
+  - pandas
   - ipycanvas=0.13.2
+  - bzip2=1.0.8
+  - xz=5.2.6
+  - pip:
+    - starlette==0.17.1
+    - Checkm==0.4
 `;
 
 create({yml, logger, platform: "linux-64"}).then(async result => {
