@@ -3,6 +3,7 @@
 import { parse } from 'yaml';
 import {
   DEFAULT_PLATFORM,
+  getPythonVersionFromPackages,
   ILogger,
   ISolvedPackages,
   ISolvedPipPackage,
@@ -12,11 +13,147 @@ import {
 } from '@emscripten-forge/mambajs-core';
 import { Platform } from '@conda-org/rattler';
 
+const PLATFORM_TAGS = {
+  'linux-64': [
+    'linux_x86_64',
+    'manylinux1_x86_64',
+    'manylinux2010_x86_64',
+    'manylinux2014_x86_64',
+    'manylinux_2_17_x86_64',
+    'manylinux_2_24_x86_64',
+    'manylinux_2_28_x86_64'
+  ],
+  'linux-32': [
+    'linux_i686',
+    'manylinux1_i686',
+    'manylinux2010_i686',
+    'manylinux2014_i686'
+  ],
+  'linux-aarch64': [
+    'linux_aarch64',
+    'manylinux2014_aarch64',
+    'manylinux_2_17_aarch64',
+    'manylinux_2_24_aarch64',
+    'manylinux_2_28_aarch64'
+  ],
+  'linux-armv6l': ['linux_armv6l'],
+  'linux-armv7l': ['linux_armv7l'],
+  'linux-ppc64le': [
+    'linux_ppc64le',
+    'manylinux2014_ppc64le',
+    'manylinux_2_17_ppc64le'
+  ],
+  'linux-ppc64': ['linux_ppc64'],
+  'linux-s390x': ['linux_s390x', 'manylinux2014_s390x', 'manylinux_2_17_s390x'],
+  'osx-64': [
+    'macosx_10_6_x86_64',
+    'macosx_10_9_x86_64',
+    'macosx_10_12_x86_64',
+    'macosx_10_13_x86_64',
+    'macosx_10_14_x86_64',
+    'macosx_10_15_x86_64',
+    'macosx_11_0_x86_64',
+    'macosx_12_0_x86_64'
+  ],
+  'osx-arm64': [
+    'macosx_11_0_arm64',
+    'macosx_12_0_arm64',
+    'macosx_13_0_arm64',
+    'macosx_14_0_arm64'
+  ],
+  'win-64': ['win_amd64'],
+  'win-32': ['win32'],
+  'win-arm64': ['win_arm64'],
+  'emscripten-wasm32': [],
+  'wasi-wasm32': []
+};
+
 interface ISpec {
   package: string;
-
   constraints: string | null;
   extras?: string[];
+}
+
+interface IWheelInfo {
+  distribution: string;
+  version: string;
+  buildTag?: string;
+  pythonTag: string;
+  abiTag: string;
+  platformTags: string[];
+}
+
+function parseWheelFilename(filename: string): IWheelInfo {
+  if (!filename.endsWith('.whl')) {
+    throw new Error('Invalid wheel filename: must end with .whl');
+  }
+
+  const base = filename.slice(0, -4); // strip ".whl"
+  const parts = base.split('-');
+
+  if (parts.length < 4) {
+    throw new Error(
+      `Invalid wheel filename: not enough parts in '${filename}'`
+    );
+  }
+
+  // According to PEP 427 the last three hyphen-separated fields are:
+  //   pythonTag - abiTag - platformTag
+  // Everything before that is: distribution - version (- buildTag?) ...
+  const pythonTag = parts[parts.length - 3];
+  const abiTag = parts[parts.length - 2];
+  const platformField = parts[parts.length - 1]; // may contain dots separating multiple platform tags
+
+  const distribution = parts[0];
+  const version = parts[1];
+
+  // anything between version (index 1) and pythonTag (index length-3) is the optional build tag.
+  const maybeBuildParts = parts.slice(2, parts.length - 3);
+  const buildTag =
+    maybeBuildParts.length > 0 ? maybeBuildParts.join('-') : undefined;
+
+  const platformTags = platformField.split('.');
+
+  return {
+    distribution,
+    version,
+    buildTag,
+    pythonTag,
+    abiTag,
+    platformTags
+  };
+}
+
+function isPythonTagCompatible(
+  pythonTag: string,
+  pythonVersion: number[]
+): boolean {
+  const [major, minor] = pythonVersion;
+  const versionNum = `${major}${minor}`; // e.g. [3, 11] → "311"
+
+  pythonTag = pythonTag.toLowerCase();
+
+  // Generic tags
+  if (pythonTag === `py${major}`) return true;
+
+  // Cross-version tags like "py2.py3"
+  if (pythonTag.includes('.')) {
+    const parts = pythonTag.split('.');
+    return parts.some(tag => isPythonTagCompatible(tag, pythonVersion));
+  }
+
+  // CPython version-specific tags like "cp311"
+  if (pythonTag.startsWith('cp')) {
+    const tagVersion = pythonTag.slice(2); // e.g. "cp311" → "311"
+    return tagVersion === versionNum;
+  }
+
+  // Generic pure-Python tags
+  if (pythonTag === 'py2' && major === 2) return true;
+  if (pythonTag === 'py') return true; // catch-all
+
+  // Non-CPython (PyPy, Jython, etc.) — assume incompatible?
+  return false;
 }
 
 function formatConstraintVersion(constraintVersion: string, version: string) {
@@ -117,7 +254,7 @@ function resolveVersion(availableVersions: string[], constraint: string) {
     : validVersions[0] || undefined;
 }
 
-function parsePyPiRequirement(requirement: string): ISpec | null {
+export function parsePyPiRequirement(requirement: string): ISpec | null {
   const extrasMatch = requirement.match(/^([^\[]+)\[([^\]]+)\]/);
   const packageName = extrasMatch
     ? extrasMatch[1]
@@ -143,8 +280,9 @@ function parsePyPiRequirement(requirement: string): ISpec | null {
 function getSuitableVersion(
   pkgInfo: any,
   constraints: string | null,
+  pythonVersion: number[],
   logger?: ILogger,
-  platform?: string
+  platform?: Platform
 ): ISolvedPipPackage | undefined {
   const availableVersions = Object.keys(pkgInfo.releases);
 
@@ -173,137 +311,27 @@ function getSuitableVersion(
     version = availableVersions.filter(isStable).sort(rcompare).reverse()[0];
   }
 
-  const urls = pkgInfo.releases[version];
+  const urls: any[] = pkgInfo.releases[version];
 
-  // Helper function to convert conda platform to pip wheel platform tags
-  const getPlatformTags = (platform?: string): string[] => {
-    if (!platform) {
-      return ['none-any'];
+  const suitablePlatformTags = ['any'];
+  if (platform) {
+    suitablePlatformTags.push(...PLATFORM_TAGS[platform]);
+  }
+
+  const wheelUrls = urls.filter(url => url.filename.endsWith('.whl'));
+  const sourceUrls = urls.filter(url => url.filename.endsWith('.tar.gz'));
+
+  for (const url of wheelUrls) {
+    const wheelInfo = parseWheelFilename(url.filename);
+
+    // Check that the url is for the current Python version
+    if (!isPythonTagCompatible(wheelInfo.pythonTag, pythonVersion)) {
+      continue;
     }
 
-    const tags: string[] = ['none-any.whl']; // Always include pure Python packages
-
-    switch (platform) {
-      case 'linux-64':
-        tags.push(
-          'linux_x86_64',
-          'manylinux1_x86_64',
-          'manylinux2010_x86_64',
-          'manylinux2014_x86_64',
-          'manylinux_2_17_x86_64',
-          'manylinux_2_24_x86_64',
-          'manylinux_2_28_x86_64',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-32':
-        tags.push(
-          'linux_i686',
-          'manylinux1_i686',
-          'manylinux2010_i686',
-          'manylinux2014_i686',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-aarch64':
-        tags.push(
-          'linux_aarch64',
-          'manylinux2014_aarch64',
-          'manylinux_2_17_aarch64',
-          'manylinux_2_24_aarch64',
-          'manylinux_2_28_aarch64',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-armv6l':
-        tags.push(
-          'linux_armv6l',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-armv7l':
-        tags.push(
-          'linux_armv7l',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-ppc64le':
-        tags.push(
-          'linux_ppc64le',
-          'manylinux2014_ppc64le',
-          'manylinux_2_17_ppc64le',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-ppc64':
-        tags.push(
-          'linux_ppc64',
-          '.tar.gz'
-        );
-        break;
-      case 'linux-s390x':
-        tags.push(
-          'linux_s390x',
-          'manylinux2014_s390x',
-          'manylinux_2_17_s390x',
-          '.tar.gz'
-        );
-        break;
-      case 'osx-64':
-        tags.push(
-          'macosx_10_6_x86_64',
-          'macosx_10_9_x86_64',
-          'macosx_10_12_x86_64',
-          'macosx_10_13_x86_64',
-          'macosx_10_14_x86_64',
-          'macosx_10_15_x86_64',
-          'macosx_11_0_x86_64',
-          'macosx_12_0_x86_64',
-          '.tar.gz'
-        );
-        break;
-      case 'osx-arm64':
-        tags.push(
-          'macosx_11_0_arm64',
-          'macosx_12_0_arm64',
-          'macosx_13_0_arm64',
-          'macosx_14_0_arm64',
-          '.tar.gz'
-        );
-        break;
-      case 'win-64':
-        tags.push(
-          'win_amd64',
-          '.tar.gz'
-        );
-        break;
-      case 'win-32':
-        tags.push(
-          'win32',
-          '.tar.gz'
-        );
-        break;
-      case 'win-arm64':
-        tags.push(
-          'win_arm64',
-          '.tar.gz'
-        );
-        break;
-      case 'emscripten-wasm32':
-      case 'wasi-wasm32':
-        // These platforms typically only support pure Python packages
-        break;
-    }
-
-    return tags;
-  };
-
-  const platformTags = getPlatformTags(platform);
-
-  for (const url of urls) {
     // Check if any of the platform tags match the wheel filename
-    for (const tag of platformTags) {
-      if (url.filename.includes(tag)) {
+    for (const tag of suitablePlatformTags) {
+      if (wheelInfo.platformTags.includes(tag)) {
         return {
           url: url.url,
           name: url.filename,
@@ -313,32 +341,65 @@ function getSuitableVersion(
       }
     }
   }
+
+  // Installing from source as a fallback
+  if (
+    sourceUrls[0] &&
+    !['emscripten-wasm32', 'wasi-wasm32'].includes(
+      platform ?? 'emscripten-wasm32'
+    )
+  ) {
+    return {
+      url: sourceUrls[0].url,
+      name: sourceUrls[0].filename,
+      version,
+      registry: 'PyPi'
+    };
+  }
 }
 
-function getUnavailableWheelError(requirement: ISpec, platform?: Platform) {
+function getUnavailableWheelError(
+  packageName: string,
+  platform: Platform = 'emscripten-wasm32'
+) {
   if (platform === 'emscripten-wasm32') {
     return (
-      `Cannot install '${requirement.package}' from PyPI because it is a binary built package that is not compatible with WASM environments. ` +
+      `Cannot install '${packageName}' from PyPI because it is a binary built package that is not compatible with WASM environments. ` +
       `To resolve this issue, you can: ` +
-      `1) Try to install it from emscripten-forge instead: "!mamba install ${requirement.package}" ` +
+      `1) Try to install it from emscripten-forge instead: "!mamba install ${packageName}" ` +
       `2) If that doesn't work, it's probably that the package was not made WASM-compatible on emscripten-forge. You can either request or contribute a new recipe for that package in https://github.com/emscripten-forge/recipes `
     );
   }
 
-  return `No wheel available for '${requirement.package}' for platform '${platform}'`;
+  return `No wheel available for '${packageName}' for platform '${platform}'`;
 }
 
-async function processRequirement(
-  requirement: ISpec,
-  warnedPackages: Set<string>,
-  pipSolvedPackages: ISolvedPipPackages,
-  installedCondaPackagesNames: Set<string>,
-  installedWheels: { [name: string]: string },
-  installPipPackagesLookup: ISolvedPipPackages,
-  logger?: ILogger,
-  required = false,
-  platform?: Platform
-) {
+export async function processRequirement(options: {
+  requirement: ISpec;
+  pythonVersion: number[];
+  warnedPackages?: Set<string>;
+  pipSolvedPackages: ISolvedPipPackages;
+  installedCondaPackagesNames?: Set<string>;
+  installedWheels?: { [name: string]: string };
+  installPipPackagesLookup?: ISolvedPipPackages;
+  logger?: ILogger;
+  required?: boolean;
+  platform?: Platform;
+}) {
+  const {
+    requirement,
+    pipSolvedPackages,
+    pythonVersion,
+    logger,
+    required,
+    platform
+  } = options;
+  const warnedPackages = options.warnedPackages ?? new Set();
+  const installPipPackagesLookup = options.installPipPackagesLookup ?? {};
+  const installedWheels = options.installedWheels ?? {};
+  const installedCondaPackagesNames =
+    options.installedCondaPackagesNames ?? new Set();
+
   const pkgMetadata = await (
     await fetch(`https://pypi.org/pypi/${requirement.package}/json`)
   ).json();
@@ -356,6 +417,7 @@ async function processRequirement(
   const solved = getSuitableVersion(
     pkgMetadata,
     requirement.constraints,
+    pythonVersion,
     logger,
     platform
   );
@@ -389,7 +451,7 @@ async function processRequirement(
         logger?.error(notFoundMsg);
         throw new Error(msg);
       } else {
-        const msg = getUnavailableWheelError(requirement, platform);
+        const msg = getUnavailableWheelError(requirement.package, platform);
 
         // Package is a direct requirement requested by the user, we throw an error
         if (required) {
@@ -403,7 +465,7 @@ async function processRequirement(
         }
       }
     } else {
-      const msg = getUnavailableWheelError(requirement, platform);
+      const msg = getUnavailableWheelError(requirement.package, platform);
 
       // Package is a direct requirement requested by the user, we throw an error
       if (required) {
@@ -488,17 +550,18 @@ async function processRequirement(
       continue;
     }
 
-    await processRequirement(
-      parsedRequirement,
+    await processRequirement({
+      requirement: parsedRequirement,
       warnedPackages,
       pipSolvedPackages,
       installedCondaPackagesNames,
       installedWheels,
       installPipPackagesLookup,
+      pythonVersion,
       logger,
-      false,
+      required: false,
       platform
-    );
+    });
   }
 }
 
@@ -559,17 +622,23 @@ export async function solvePip(
       continue;
     }
 
-    await processRequirement(
-      spec,
+    const pythonVersion = getPythonVersionFromPackages(installedCondaPackages);
+    if (!pythonVersion) {
+      throw new Error('Failed to get Python version');
+    }
+
+    await processRequirement({
+      requirement: spec,
       warnedPackages,
       pipSolvedPackages,
       installedCondaPackagesNames,
       installedWheels,
       installPipPackagesLookup,
+      pythonVersion,
       logger,
-      true,
+      required: true,
       platform
-    );
+    });
   }
 
   const oldPackagesLookup: ISolvedPipPackages = {};
