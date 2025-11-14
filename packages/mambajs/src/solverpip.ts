@@ -68,6 +68,12 @@ const PLATFORM_TAGS = {
   'wasi-wasm32': []
 };
 
+interface ParsedGitHubUrl {
+  owner: string;
+  repo: string;
+  ref: string;
+}
+
 interface ISpec {
   package: string;
   constraints: string | null;
@@ -296,24 +302,48 @@ function decodeBase64(base64: string): string {
   return output;
 }
 
-function parseGitHubUrl(url: string): {
-  owner: string;
-  repo: string;
-  ref: string;
-} | null {
-  // Match git+https://github.com/owner/repo@ref or git+https://github.com/owner/repo.git@ref
+/**
+ * Parse GitHub git+ URLs and fetch the default branch if ref is not provided.
+ *
+ * Examples:
+ *  - git+https://github.com/owner/repo
+ *  - git+https://github.com/owner/repo.git
+ *  - git+https://github.com/owner/repo@ref
+ */
+export async function parseGitHubUrl(url: string): Promise<ParsedGitHubUrl | null> {
+  // Pattern with optional @ref
   const match = url.match(
-    /^git\+https:\/\/github\.com\/([^\/]+)\/([^@\/]+?)(?:\.git)?@(.+)$/
+    /^git\+https:\/\/github\.com\/([^\/]+)\/([^@\/]+?)(?:\.git)?(?:@(.+))?$/
   );
 
-  if (!match) {
-    return null;
+  if (!match) return null;
+
+  const owner = match[1];
+  const repo = match[2];
+  const ref = match[3]; // may be undefined
+
+  if (ref) {
+    return { owner, repo, ref };
+  }
+
+  // No ref: fetch default branch from GitHub API
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
+  const response = await fetch(apiUrl);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch repo info from GitHub: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (!data.default_branch) {
+    throw new Error(`Unable to determine default branch for ${owner}/${repo}`);
   }
 
   return {
-    owner: match[1],
-    repo: match[2],
-    ref: match[3]
+    owner,
+    repo,
+    ref: data.default_branch,
   };
 }
 
@@ -463,9 +493,9 @@ function parsePyprojectToml(content: string): IGitHubPackageInfo | null {
   };
 }
 
-export function parsePyPiRequirement(requirement: string): ISpec | null {
+export async function parsePyPiRequirement(requirement: string): Promise<ISpec | null> {
   // Check if it's a GitHub URL
-  const gitHubUrlInfo = parseGitHubUrl(requirement);
+  const gitHubUrlInfo = await parseGitHubUrl(requirement);
   if (gitHubUrlInfo) {
     return {
       package: '', // Will be filled later from GitHub API
@@ -629,7 +659,7 @@ export async function processRequirement(options: {
       throw new Error(msg);
     }
 
-    const gitHubUrlInfo = parseGitHubUrl(requirement.gitHubUrl);
+    const gitHubUrlInfo = await parseGitHubUrl(requirement.gitHubUrl);
     if (!gitHubUrlInfo) {
       const msg = `Invalid GitHub URL format: ${requirement.gitHubUrl}`;
       logger?.error(msg);
@@ -686,7 +716,7 @@ export async function processRequirement(options: {
 
       // Process dependencies
       for (const dep of gitHubPackageInfo.dependencies) {
-        const parsedDep = parsePyPiRequirement(dep);
+        const parsedDep = await parsePyPiRequirement(dep);
         if (!parsedDep) {
           continue;
         }
@@ -854,7 +884,7 @@ export async function processRequirement(options: {
   for (const raw of filteredRequiresDist) {
     const [requirements] = raw.split(';').map(s => s.trim());
 
-    const parsedRequirement = parsePyPiRequirement(requirements);
+    const parsedRequirement = await parsePyPiRequirement(requirements);
     if (!parsedRequirement) {
       continue;
     }
@@ -917,9 +947,9 @@ export async function solvePip(
 
   if (yml) {
     const data = parseEnvYml(yml);
-    specs = parsePipPackage(data.pipSpecs);
+    specs = await parsePipPackage(data.pipSpecs);
   } else if (packageNames.length) {
-    specs = parsePipPackage(packageNames);
+    specs = await parsePipPackage(packageNames);
   }
 
   // Create lookup tables for already installed packages
@@ -1002,10 +1032,10 @@ export async function solvePip(
   return pipSolvedPackages;
 }
 
-function parsePipPackage(pipPackages: Array<string>): ISpec[] {
+async function parsePipPackage(pipPackages: Array<string>): Promise<ISpec[]> {
   const specs: ISpec[] = [];
   for (const pipPkg of pipPackages) {
-    const parsedSpec = parsePyPiRequirement(pipPkg);
+    const parsedSpec = await parsePyPiRequirement(pipPkg);
     if (parsedSpec) {
       specs.push(parsedSpec);
     }
