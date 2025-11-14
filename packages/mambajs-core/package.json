@@ -1,6 +1,6 @@
 {
   "name": "@emscripten-forge/mambajs-core",
-  "version": "0.19.3",
+  "version": "0.19.4",
   "description": "Mambajs core utilities",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
