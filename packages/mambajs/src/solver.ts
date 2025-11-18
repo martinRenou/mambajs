@@ -111,6 +111,8 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
         subdir
       };
 
+      if (item.size) condaPackages[filename].size = Number(item.size);
+
       if (Object.keys(hash).length) {
         condaPackages[filename].hash = hash;
       }
@@ -159,10 +161,13 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     if (pkg.hash) {
       packages[filename].hash = pkg.hash;
     }
+    if (pkg.size) {
+      packages[filename].size = pkg.size;
+    }
   });
 
   return {
-    lockVersion: '1.0.1',
+    lockVersion: '1.0.2',
     platform,
     specs,
     channels: formattedChannels.channels,
