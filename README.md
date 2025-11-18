@@ -274,6 +274,7 @@ yarn lint
 ### Release Process
 
 ```bash
+git clean -fdx
 yarn
 npx lerna version --no-private
 # Push main branch and tag
