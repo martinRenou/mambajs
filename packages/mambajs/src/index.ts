@@ -22,6 +22,11 @@ function logBanner(logger?: ILogger) {
   logger?.log('');
 }
 
+/**
+ * Solve the environment
+ * @param options
+ * @returns the new lock
+ */
 export async function solve(options: ISolveOptions): Promise<ILock> {
   const { logger, ymlOrSpecs, pipSpecs, currentLock } = options;
   const platform = options.platform ?? DEFAULT_PLATFORM;

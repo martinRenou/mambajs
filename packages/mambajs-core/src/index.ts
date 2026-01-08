@@ -386,6 +386,10 @@ export async function installPackagesToEmscriptenFS(
   return { sharedLibs: sharedLibsMap, paths: paths, untarjs, pythonVersion };
 }
 
+/**
+ * Install mount points to an Emscripten FS
+ * @param options
+ */
 export async function installMountPointToEmscriptenFS(
   options: IInstallMountPointsToEnvOptions
 ): Promise<void> {
