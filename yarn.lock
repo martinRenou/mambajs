@@ -69,6 +69,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@emscripten-forge/mambajs-cli@workspace:packages/mambajs-cli":
+  version: 0.0.0-use.local
+  resolution: "@emscripten-forge/mambajs-cli@workspace:packages/mambajs-cli"
+  dependencies:
+    "@emscripten-forge/mambajs": "npm:^0.19.13"
+    "@esbuild-plugins/node-globals-polyfill": "npm:^0.2.3"
+    "@esbuild-plugins/node-modules-polyfill": "npm:^0.2.2"
+    "@types/node": "npm:^25.1.0"
+    commander: "npm:^14.0.2"
+    esbuild: "npm:^0.24.0"
+    rimraf: "npm:^3.0.2"
+    typescript: "npm:^5"
+  bin:
+    mambajs: dist/index.js
+  languageName: unknown
+  linkType: soft
+
 "@emscripten-forge/mambajs-core@npm:^0.19.13, @emscripten-forge/mambajs-core@workspace:packages/mambajs-core":
   version: 0.0.0-use.local
   resolution: "@emscripten-forge/mambajs-core@workspace:packages/mambajs-core"
@@ -107,7 +124,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@emscripten-forge/mambajs@workspace:packages/mambajs":
+"@emscripten-forge/mambajs@npm:^0.19.13, @emscripten-forge/mambajs@workspace:packages/mambajs":
   version: 0.0.0-use.local
   resolution: "@emscripten-forge/mambajs@workspace:packages/mambajs"
   dependencies:
@@ -1120,6 +1137,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:^25.1.0":
+  version: 25.1.0
+  resolution: "@types/node@npm:25.1.0"
+  dependencies:
+    undici-types: "npm:~7.16.0"
+  checksum: 10c0/5f393a127dc9565e2e152514a271455d580c7095afc51302e73ffe8aac3526b64ebacc3c10dd40c93cef81a95436ef2c6a8b522930df567a3f6b189c0eef649a
+  languageName: node
+  linkType: hard
+
 "@types/normalize-package-data@npm:^2.4.0":
   version: 2.4.4
   resolution: "@types/normalize-package-data@npm:2.4.4"
@@ -2015,6 +2041,13 @@ __metadata:
   dependencies:
     delayed-stream: "npm:~1.0.0"
   checksum: 10c0/0dbb829577e1b1e839fa82b40c07ffaf7de8a09b935cadd355a73652ae70a88b4320db322f6634a4ad93424292fa80973ac6480986247f1734a1137debf271d5
+  languageName: node
+  linkType: hard
+
+"commander@npm:^14.0.2":
+  version: 14.0.2
+  resolution: "commander@npm:14.0.2"
+  checksum: 10c0/245abd1349dbad5414cb6517b7b5c584895c02c4f7836ff5395f301192b8566f9796c82d7bd6c92d07eba8775fe4df86602fca5d86d8d10bcc2aded1e21c2aeb
   languageName: node
   linkType: hard
 
@@ -7400,6 +7433,13 @@ __metadata:
     has-symbols: "npm:^1.1.0"
     which-boxed-primitive: "npm:^1.1.1"
   checksum: 10c0/7dbd35ab02b0e05fe07136c72cb9355091242455473ec15057c11430129bab38b7b3624019b8778d02a881c13de44d63cd02d122ee782fb519e1de7775b5b982
+  languageName: node
+  linkType: hard
+
+"undici-types@npm:~7.16.0":
+  version: 7.16.0
+  resolution: "undici-types@npm:7.16.0"
+  checksum: 10c0/3033e2f2b5c9f1504bdc5934646cb54e37ecaca0f9249c983f7b1fc2e87c6d18399ebb05dc7fd5419e02b2e915f734d872a65da2e3eeed1813951c427d33cc9a
   languageName: node
   linkType: hard
 

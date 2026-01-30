@@ -1,9 +1,15 @@
 # Node.js
 node_modules/
 npm-debug.log/
+dist/
 lib/
 unittests/testlib/
 unittests/packages/
+
+# Python stuff
+*egg-info
+__pycache__
+.pytest_cache
 
 .yarn
 
@@ -13,3 +19,6 @@ tsconfig.tsbuildinfo
 
 # Temporary micromamba binary (if downloaded for setup)
 bin/micromamba
+
+python/mambajs/bin
+python/mambajs/package.json

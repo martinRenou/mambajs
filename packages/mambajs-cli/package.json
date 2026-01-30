@@ -1,0 +1,41 @@
+{
+  "name": "@emscripten-forge/mambajs-cli",
+  "version": "0.19.13",
+  "description": "MambaJS CLI for generating lock files",
+  "bin": {
+    "mambajs": "dist/index.js"
+  },
+  "scripts": {
+    "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
+    "build": "yarn run clean && yarn run build:esbuild && yarn run cp:package.json",
+    "build:esbuild": "node esbuild.config.js",
+    "cp:package.json": "cp ./package.json ../../python/mambajs",
+    "dev:build:exe": "yarn run build && bun build ./dist/index.js --compile --outfile ../../python/mambajs/bin/mambajs",
+    "windev:build:exe": "yarn run build && bun build ./dist/index.js --compile --outfile ../../python/mambajs/bin/mambajs.exe"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/emscripten-forge/mambajs",
+  "bugs": {
+    "url": "https://github.com/emscripten-forge/mambajs/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emscripten-forge/mambajs.git"
+  },
+  "author": "Emscripten-forge developers",
+  "license": " BSD-3-Clause license ",
+  "dependencies": {
+    "@emscripten-forge/mambajs": "^0.19.13",
+    "commander": "^14.0.2"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+    "@types/node": "^25.1.0",
+    "esbuild": "^0.24.0",
+    "rimraf": "^3.0.2",
+    "typescript": "^5"
+  }
+}
