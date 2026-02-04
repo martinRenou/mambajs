@@ -142,7 +142,9 @@ jobs:
           environment-name: mambajs
 
       - name: Publish wheels to PyPI
-        run: twine upload --repository pypi dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
 
       - name: Install JS dependencies
         run: yarn install
