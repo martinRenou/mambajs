@@ -48,6 +48,11 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     logger.log('Solving environment...');
   }
 
+  if (platform === 'emscripten-wasm32') {
+    // Injecting emscripten-abi so that 4.x takes precedence if both 3.x and 4.x are valid
+    specs = ['emscripten-abi', ...specs]
+  }
+
   try {
     const startSolveTime = performance.now();
 
