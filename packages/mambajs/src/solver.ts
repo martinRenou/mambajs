@@ -52,8 +52,7 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     const startSolveTime = performance.now();
 
     const result = (await simpleSolve(
-      // Injecting emscripten-abi so that 4.x takes precedence if both 3.x and 4.x are valid
-      platform === 'emscripten-wasm32' ? ['emscripten-abi', ...specs] : specs,
+      specs,
       formattedChannels.channels.map(channelName => {
         // TODO Support picking mirror
         // Always picking the first mirror for now
