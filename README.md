@@ -23,6 +23,7 @@
 Mambajs is a powerful toolbox designed for manipulating conda environment definitions, with first-class support for:
 
 - **Conda package management**: Create, solve, install, and remove conda packages
+- **Uses [prefix.dev](https://prefix.dev) by default, not anaconda**
 - **Pip package support**: Install and manage pip packages alongside conda packages
 - **Emscripten/WebAssembly environments**: Built with `emscripten-wasm32` platform in mind
 - **Filesystem operations**: Tools for installing/uninstalling packages into an Emscripten FS
