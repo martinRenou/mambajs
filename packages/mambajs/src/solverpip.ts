@@ -530,7 +530,29 @@ export async function processRequirement(options: {
     delete installedWheels[requirement.package];
   }
 
-  const requiresDist = pkgMetadata.info.requires_dist as string[] | undefined;
+  let requiresDist = pkgMetadata.info.requires_dist as string[] | undefined;
+  try {
+    const encodedPackageName = encodeURIComponent(requirement.package);
+    const encodedVersion = encodeURIComponent(solved.version);
+    const versionResponse = await fetch(
+      `https://pypi.org/pypi/${encodedPackageName}/${encodedVersion}/json`
+    );
+    if (!versionResponse.ok) {
+      throw new Error(`HTTP ${versionResponse.status}`);
+    }
+    const versionMetadata = await versionResponse.json();
+    const versionRequiresDist = versionMetadata?.info?.requires_dist as
+      | string[]
+      | undefined;
+    if (versionRequiresDist?.length) {
+      requiresDist = versionRequiresDist;
+    }
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    logger?.warn(
+      `Failed to fetch version-specific metadata for ${requirement.package}==${solved.version}: ${errorMessage}. Falling back to package metadata.`
+    );
+  }
 
   const filteredRequiresDist = (requiresDist || []).filter(raw => {
     const [, envMarker] = raw.split(';').map(s => s.trim());
