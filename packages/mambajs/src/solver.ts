@@ -9,7 +9,12 @@ import {
   MAMBAJS_LOCK_VERSION,
   parseEnvYml
 } from '@emscripten-forge/mambajs-core';
-import { Platform, simpleSolve, SolvedPackage } from '@conda-org/rattler';
+import {
+  isRattlerError,
+  Platform,
+  simpleSolve,
+  SolvedPackage
+} from '@conda-org/rattler';
 
 export interface ISolveOptions {
   ymlOrSpecs?: string | string[];
@@ -29,7 +34,7 @@ const VIRTUAL_PACKAGES = {
   __archspec: makeVirtualPackage('__archspec')
 };
 
-function makeVirtualPackage(name: string, version='0') {
+function makeVirtualPackage(name: string, version = '0') {
   return {
     filename: name,
     packageName: name,
@@ -173,7 +178,10 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
     });
   } catch (error) {
     let message: string = 'Unknown error';
-    if (typeof error === 'string') {
+
+    if (isRattlerError(error)) {
+      message = `${error.name} ${error.code}: ${error.message}`;
+    } else if (typeof error === 'string') {
       message = error;
     } else if (error instanceof Error) {
       message = error.message;
@@ -196,11 +204,17 @@ export const solveConda = async (options: ISolveOptions): Promise<ILock> => {
   Object.keys(condaPackages).forEach(filename => {
     const pkg = condaPackages[filename];
 
+    // Remove virtual package from the result
+    if (pkg.name in VIRTUAL_PACKAGES) {
+      delete condaPackages[filename];
+      return;
+    }
+
     const channel = computePackageChannel(pkg, formattedChannels);
 
     if (!channel) {
       throw new Error(
-        `Failed to detect channel from ${pkg} (${pkg.channel}), with known channels ${formattedChannels.channels}`
+        `Failed to detect channel from ${pkg.name} (${pkg.channel}), with known channels ${formattedChannels.channels}`
       );
     }
 
